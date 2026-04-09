@@ -31,7 +31,7 @@ antardhasa_list = [6,0,8,10,4,8,6,0,8,10,4,8]
 chara_paryaaya_list = [1,5,9,2,6,10,3,7,11,4,8,12]
 ubhaya_paryaaya_list = [1,4,7,10,2,5,8,11,3,6,9,12]
 sthira_paryaaya_list = [1,7,2,8,3,9,4,10,5,11,6,12]
-
+year_duration = const.sidereal_year
 def applicability(planet_positions):
     p_to_h = utils.get_planet_house_dictionary_from_planet_positions(planet_positions)
     lagna = p_to_h[const._ascendant_symbol]
@@ -110,146 +110,331 @@ def get_dhasa_antardhasa(
     years=1,
     months=1,
     sixty_hours=1,
-    dhasa_level_index=2,     # 1..6; default L2 (Maha + Antara)
+    dhasa_level_index=2,             # 1..6; default L2 (Maha + Antara)
     use_tribhagi_variation=False,
     round_duration=False,
-    chara_seed_method = 1
+    chara_seed_method=1,
+    **kwargs
 ):
     """
-    Calculate Paryaaya Dasha up to the requested depth.
+    Paryāya Daśā (base) — depth-enabled (Mahā → Antara → …)
 
-    Output (variable arity by level):
-      L1: (MD, start_str, dur_years)
-      L2: (MD, AD, start_str, dur_years)
-      L3: (MD, AD, PD, start_str, dur_years)
-      ...
-      L6: (L1, L2, L3, L4, L5, L6, start_str, dur_years)
-      Note: Ref: https://www.indiadivine.org/content/topic/1209053-varnada-and-paryaaya-dasa/
-        Chara method = 1 - Iranganti / Raghava Bhatta - stronger of 1,5,9
-        chara method = 2 - Krishna Mishra - stronger of Lagna and 7th
+    Returns:
+      (dhasa_type, rows)
+        dhasa_type: 1=Chara, 2=Ubhaya, 3=Sthira
+        rows: [(lords_tuple, start_tuple, dur_years_display), ...]
+
+    Policy:
+      • NO lifespan/total-duration cutoff.
+      • Rounding ONLY on returned 'dur_years' (not used in JD math).
+      • Children = equal split (/12) with full-precision JD arithmetic (exact tiling).
     """
+    lvl = int(dhasa_level_index)
+    if not (1 <= lvl <= 6):
+        raise ValueError("dhasa_level_index must be within [1..6].")
 
-    # ------------------------
-    # Tribhagi settings
-    # ------------------------
-    _dhasa_cycles = 2
-    _tribhagi_factor = 1.0
+    # Tribhāgī
+    cycles = 2
+    scale  = 1.0
     if use_tribhagi_variation:
-        _tribhagi_factor = 1.0 / 3.0
-        _dhasa_cycles = int(_dhasa_cycles / _tribhagi_factor)  # e.g., 2 / (1/3) => 6 cycles
+        scale  = 1.0 / 3.0
+        cycles = int(cycles / scale)  # e.g., 6 cycles
 
-    # ------------------------
-    # Prepare chart & seed
-    # ------------------------
+    # Epoch & varga
     jd_at_dob = utils.julian_day_number(dob, tob)
-    planet_positions = charts.divisional_chart(
-        jd_at_dob,
-        place,
+    pp = charts.divisional_chart(
+        jd_at_dob, place,
         divisional_chart_factor=divisional_chart_factor,
-        years=years,
-        months=months,
-        sixty_hours=sixty_hours
+        years=years, months=months, sixty_hours=sixty_hours,**kwargs
     )[:const._pp_count_upto_ketu]
-    asc_house = planet_positions[0][1][0]
-    dhasa_seed = (asc_house + divisional_chart_factor - 1) % 12  # per your original logic
-    dhasa_type, md_lords = _dhasa_lords(planet_positions, dhasa_seed,chara_seed_method=chara_seed_method)
-    dhasa_info = []
+
+    # Seed (your original logic)
+    asc_house  = pp[0][1][0]
+    dhasa_seed = (asc_house + divisional_chart_factor - 1) % 12
+
+    # Mahā order
+    dhasa_type, md_lords = _dhasa_lords(pp, dhasa_seed, chara_seed_method=chara_seed_method)
+
+    rows     = []
     start_jd = jd_at_dob
-    stop_due_to_lifespan = False
 
-    def _append_row(lords_stack, start_jd_val, seg_duration_years):
+    def _append_row(labels, start_jd_val, seg_years):
+        """Append row with display rounding only; JD math stays exact."""
+        disp = round(seg_years, lvl + 1) if round_duration else seg_years
+        rows.append((tuple(labels), utils.jd_to_gregorian(start_jd_val), float(disp)))
+
+    def _recurse(level, parent_lord, pstart_jd, parent_years, prefix):
         """
-        Append a single leaf row with (optionally rounded) duration and enforce lifespan cutoff.
+        Expand one level at a time:
+          • If level+1 == target: emit 12 child rows (final expansion).
+          • Else: recurse into each child.
         """
-        # Display duration (rounded only for output)
-        disp_dur = seg_duration_years
-        if round_duration:
-            _round_ndigits = getattr(const, 'DHASA_DURATION_ROUNDING_TO', 2)
-            disp_dur = round(disp_dur, _round_ndigits)
+        _, child_seq = _dhasa_lords(pp, parent_lord, chara_seed_method=chara_seed_method)
+        child_years  = parent_years / 12.0
+        jd_ptr       = pstart_jd
 
-        dhasa_info.append(tuple(lords_stack + [utils.julian_day_to_date_time_string(start_jd_val), disp_dur]))
+        if level + 1 == lvl:
+            # Final expansion: emit 12 child rows
+            for c in child_seq:
+                _append_row(prefix + (c,), jd_ptr, child_years)
+                jd_ptr += child_years * const.sidereal_year
+            return jd_ptr
 
-        # Lifespan cutoff right after appending the row
-        birth_jd = jd_at_dob
-        age_years = (start_jd_val - birth_jd) / const.sidereal_year
-        if age_years >= getattr(const, 'human_life_span_for_narayana_dhasa', 108):
-            return True
-        return False
+        # Go deeper
+        for c in child_seq:
+            jd_ptr = _recurse(level + 1, c, jd_ptr, child_years, prefix + (c,))
+        return jd_ptr
 
-    def _expand_children(start_jd_val, parent_duration_years, parent_lords_stack, current_level, target_level):
-        """
-        Recursively expand a node:
-          • Leaf if current_level == target_level → append one row for entire segment.
-          • Otherwise split into 12 equal children ordered by _dhasa_lords with
-            seed = immediate parent lord.
-        Returns updated start_jd after consuming this segment.
-        """
-        nonlocal stop_due_to_lifespan
+    # Build across cycles
+    for _ in range(cycles):
+        for md in md_lords:
+            md_years = float(_dhasa_duration_indiadivine(pp, md)) * scale
+            if lvl == 1:
+                _append_row((md,), start_jd, md_years)
+                start_jd += md_years * const.sidereal_year
+            else:
+                # Start recursion at Mahā level = 1 (so depth math is consistent)
+                start_jd = _recurse(1, md, start_jd, md_years, (md,))
 
-        if current_level == target_level:
-            # Leaf node: append one row for the full segment
-            if _append_row(parent_lords_stack, start_jd_val, parent_duration_years):
-                stop_due_to_lifespan = True
-            # Advance by the leaf duration
-            return start_jd_val + parent_duration_years * const.sidereal_year
+    return dhasa_type, rows
+def paryaaya_immediate_children(
+    parent_lords,
+    parent_start,                # (Y, M, D, fractional_hour)
+    parent_duration=None,        # float years  (provide exactly one of: duration OR end)
+    parent_end=None,             # (Y, M, D, fractional_hour)
+    *,
+    jd_at_dob,
+    place,
+    divisional_chart_factor: int = 6,
+    years: int = 1, months: int = 1, sixty_hours: int = 1,
+    use_tribhagi_variation: bool = False,      # parent_years already encodes this in practice
+    chara_seed_method: int = 1,
+    year_duration: float = const.sidereal_year,
+    round_duration: bool = False,
+    **kwargs
+):
+    """
+    Paryāya — return ONLY the immediate (parent -> children) splits.
+    Children order comes from _dhasa_lords(<target varga>, parent_lord)[1].
+    Children durations = parent_years / 12. Exact tiling on [parent_start, parent_end).
+    """
+    # normalize path
+    if isinstance(parent_lords, int):
+        path = (int(parent_lords),)
+    elif isinstance(parent_lords, (tuple, list)) and parent_lords:
+        path = tuple(int(x) for x in parent_lords)
+    else:
+        raise ValueError("parent_lords must be int or non-empty tuple/list")
+    parent_lord = path[-1]
 
-        # Otherwise split into 12 children at the next level
-        parent_lord = parent_lords_stack[-1]
-        _,child_sequence = _dhasa_lords(planet_positions, parent_lord)
-        child_duration = parent_duration_years / 12.0  # equal split
+    # tuple <-> JD
+    def _tuple_to_jd(t):
+        y, m, d, fh = t
+        return utils.julian_day_number(drik.Date(y, m, d), (fh, 0, 0))
+    def _jd_to_tuple(jd_val):
+        return utils.jd_to_gregorian(jd_val)
 
-        for child_lord in child_sequence:
-            if stop_due_to_lifespan:
-                break
-            # Recurse down one level
-            start_jd_val = _expand_children(
-                start_jd_val,
-                child_duration,
-                parent_lords_stack + [child_lord],
-                current_level + 1,
-                target_level
-            )
+    # parent span
+    start_jd = _tuple_to_jd(parent_start)
+    if (parent_duration is None) == (parent_end is None):
+        raise ValueError("Provide exactly one of parent_duration (years) or parent_end (tuple)")
+    if parent_end is None:
+        parent_years = float(parent_duration)
+        end_jd = start_jd + parent_years * year_duration
+    else:
+        end_jd = _tuple_to_jd(parent_end)
+        parent_years = (end_jd - start_jd) / year_duration
 
-        return start_jd_val
+    # ⛔ zero-length parent → no children
+    if end_jd <= start_jd:
+        return []
 
-    # ------------------------
-    # Generate rows across cycles
-    # ------------------------
-    for _ in range(_dhasa_cycles):
-        for md_lord in md_lords:
-            if stop_due_to_lifespan:
-                break
+    # build target varga (same as base)
+    pp = charts.divisional_chart(
+        jd_at_dob, place,
+        divisional_chart_factor=divisional_chart_factor,
+        years=years, months=months, sixty_hours=sixty_hours,**kwargs
+    )[:const._pp_count_upto_ketu]
 
-            # Base MD duration (scaled for tribhagi if enabled); DO NOT ROUND here
-            #md_years = _dhasa_duration_iranganti(planet_positions, md_lord) * _tribhagi_factor
-            md_years = _dhasa_duration_indiadivine(planet_positions, md_lord) * _tribhagi_factor
-            # Expand to requested depth; do not advance JD again afterward
-            start_jd = _expand_children(
-                start_jd,
-                md_years,
-                [md_lord],
-                current_level=1,
-                target_level=dhasa_level_index
-            )
+    # order & equal split
+    _, child_seq = _dhasa_lords(pp, parent_lord, chara_seed_method=chara_seed_method)
+    child_years  = parent_years / 12.0
+    incr_days    = child_years * const.sidereal_year
 
-        if stop_due_to_lifespan:
+    # tile children
+    children, cursor = [], start_jd
+    for i, c in enumerate(child_seq):
+        child_end = end_jd if i == 11 else cursor + incr_days
+        if child_end > end_jd:
+            child_end = end_jd
+        if child_end > cursor:  # skip any degenerate zero spans
+            children.append((path + (c,), _jd_to_tuple(cursor), _jd_to_tuple(child_end)))
+        cursor = child_end
+        if cursor >= end_jd:
             break
 
-    return dhasa_type,dhasa_info
+    # close exactly on the parent end
+    if children:
+        children[-1] = (children[-1][0], children[-1][1], _jd_to_tuple(end_jd))
+    return children
+def get_running_dhasa_for_given_date(
+    current_jd,
+    jd_at_dob,
+    place,
+    dhasa_level_index=const.MAHA_DHASA_DEPTH.DEHA,
+    *,
+    divisional_chart_factor: int = 6,
+    years: int = 1, months: int = 1, sixty_hours: int = 1,
+    use_tribhagi_variation: bool = False,
+    chara_seed_method: int = 1,
+    year_duration: float = const.sidereal_year,
+    round_duration: bool = False,
+    **kwargs
+):
+    """
+    Paryāya — running ladder at `current_jd`:
+      [
+        [(l1,),              start1, end1],
+        [(l1,l2),            start2, end2],
+        ...
+        [(l1,..,l_d),        startd, endd]
+      ]
+
+    Zero-duration-safe:
+      • Mahā ladder is taken from the base (L1) and any zero-length Mahā is **skipped**
+        when building the period list for selection.
+    """
+    # normalize depth
+    def _norm(x):
+        try: d = int(x)
+        except Exception: d = int(const.MAHA_DHASA_DEPTH.DEHA)
+        lo = int(const.MAHA_DHASA_DEPTH.MAHA_DHASA_ONLY)
+        hi = int(const.MAHA_DHASA_DEPTH.DEHA)
+        return min(hi, max(lo, d))
+    target = _norm(dhasa_level_index)
+
+    # tuple <-> JD
+    def _tuple_to_jd(t):
+        y, m, d, fh = t
+        return utils.julian_day_number(drik.Date(y, m, d), (fh, 0, 0))
+
+    def _to_periods(children_rows, parent_end_tuple):
+        """children_rows → [(lords, start), ..., sentinel(parent_end)] with strictly increasing starts."""
+        if not children_rows:
+            return []
+        rows = sorted(children_rows, key=lambda r: _tuple_to_jd(r[1]))
+        proj, prev = [], None
+        for lords, st, en in rows:
+            sjd = _tuple_to_jd(st)
+            if prev is None or sjd > prev:
+                proj.append((lords, st)); prev = sjd
+        proj.append((proj[-1][0], parent_end_tuple))
+        return proj
+
+    # derive dob/tob once
+    y0, m0, d0, fh0 = utils.jd_to_gregorian(jd_at_dob)
+    dob = drik.Date(y0, m0, d0); tob = (fh0, 0, 0)
+
+    # ---- L1 Mahā via base (unrounded) ----
+    _, maha_rows = get_dhasa_antardhasa(
+        dob, tob, place,
+        divisional_chart_factor=divisional_chart_factor,
+        years=years, months=months, sixty_hours=sixty_hours,
+        dhasa_level_index=const.MAHA_DHASA_DEPTH.MAHA_DHASA_ONLY,
+        use_tribhagi_variation=use_tribhagi_variation,
+        round_duration=False,
+        chara_seed_method=chara_seed_method,**kwargs
+    )
+    if not maha_rows:
+        return []
+
+    # Build Mahā periods + sentinel using exact JD math
+    periods = []
+    jd_cursor = jd_at_dob
+
+    # ⛔ Skip zero-duration Mahās to keep starts strictly increasing
+    for (lords_tuple, start_tuple, dur_years) in maha_rows:
+        dur = float(dur_years)
+        if dur <= 0.0:
+            # Advance jd_cursor by 0; do not append this MD
+            continue
+        lords = tuple(lords_tuple) if isinstance(lords_tuple, (tuple, list)) else (lords_tuple,)
+        # Add (lords, start)
+        periods.append((lords, start_tuple))
+        # Advance cursor
+        jd_cursor = _tuple_to_jd(start_tuple) + dur * year_duration
+
+    # If all Mahās were zero (extremely rare), fall back to a single-point sentinel
+    if not periods:
+        sentinel = utils.jd_to_gregorian(jd_at_dob)
+        rd1 = ((), sentinel, sentinel)
+        return [[(), sentinel, sentinel]]
+
+    # Sentinel end: after last *positive* Mahā
+    periods.append((periods[-1][0], utils.jd_to_gregorian(jd_cursor)))
+
+    # Running Mahā
+    rd1 = utils.get_running_dhasa_for_given_date(current_jd, periods)
+    running = [tuple(rd1[0]), rd1[1], rd1[2]]
+    ladder  = [running]
+
+    if target == int(const.MAHA_DHASA_DEPTH.MAHA_DHASA_ONLY):
+        return ladder
+
+    # ---- Deeper levels via fast immediate-children ----
+    for depth in range(2, target + 1):
+        parent_lords, parent_start, parent_end = running
+
+        kids = paryaaya_immediate_children(
+            parent_lords=parent_lords,
+            parent_start=parent_start,
+            parent_end=parent_end,
+            jd_at_dob=jd_at_dob,
+            place=place,
+            divisional_chart_factor=divisional_chart_factor,
+            years=years, months=months, sixty_hours=sixty_hours,
+            use_tribhagi_variation=use_tribhagi_variation,
+            chara_seed_method=chara_seed_method,
+            year_duration=year_duration,
+            round_duration=False,**kwargs
+        )
+        if not kids:
+            # zero-length (or no deeper split) → represent boundary
+            ladder.append((parent_lords + (parent_lords[-1],), parent_end, parent_end))
+            break
+
+        periods = _to_periods(kids, parent_end_tuple=parent_end)
+        rdk     = utils.get_running_dhasa_for_given_date(current_jd, periods)
+        running = [tuple(rdk[0]), rdk[1], rdk[2]]
+        ladder.append(running)
+
+    return ladder
+
 if __name__ == "__main__":
     utils.set_language('en')
-    """
-    dob = drik.Date(1982,4,10); tob = (20,30,0); place=drik.Place('',20+2/60,75+13/60,5.5)
-    jd = utils.julian_day_number(dob,tob); dcf = 1
-    pp = charts.divisional_chart(jd,place,divisional_chart_factor=dcf)
-    chart_rasi = utils.get_house_planet_list_from_planet_positions(pp)
-    print(chart_rasi)
-    p_to_h = utils.get_planet_house_dictionary_from_planet_positions(pp)
-    print(p_to_h)
-    dhasa_type,pd = get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=dcf,dhasa_level_index=1)
-    print(dhasa_type,pd)
+    dob = drik.Date(1996,12,7); tob = (10,34,0)
+    place = drik.Place('Chennai,IN', 13.0389, 80.2619, +5.5)    
+    jd_at_dob  = utils.julian_day_number(dob, tob)
+    from datetime import datetime
+    current_date_str,current_time_str = datetime.now().strftime('%Y,%m,%d;%H:%M:%S').split(';')
+    y,m,d = map(int,current_date_str.split(','))
+    hh,mm,ss = map(int,current_time_str.split(':')); fh = hh+mm/60+ss/3600
+    print(utils.date_time_tuple_to_date_time_string(y, m, d, fh))
+    current_jd = utils.julian_day_number(drik.Date(y,m,d),(hh,mm,ss))
+    _dhasa_cycle_count = 2
+    import time
+    start_time = time.time()
+    DLI = const.MAHA_DHASA_DEPTH.DEHA
+    print("Maha        :", get_running_dhasa_for_given_date(current_jd, jd_at_dob, place,
+                                                            dhasa_level_index=DLI))
+    print('new method elapsed time',time.time()-start_time)
+    start_time = time.time()
+    _,ad = get_dhasa_antardhasa(dob,tob, place,dhasa_level_index=DLI)
+    print(utils.get_running_dhasa_at_all_levels_for_given_date(current_jd, ad,DLI,
+                                                               extract_running_period_for_all_levels=True,
+                                                               dhasa_cycle_count=_dhasa_cycle_count))
+    print('old method elapsed time',time.time()-start_time)
     exit()
-    """
     from jhora.tests import pvr_tests
     pvr_tests._STOP_IF_ANY_TEST_FAILED = True
     pvr_tests.paryaaya_dhasa_test()

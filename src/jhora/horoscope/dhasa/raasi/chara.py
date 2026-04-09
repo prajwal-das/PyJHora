@@ -20,6 +20,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from jhora import const,utils
 from jhora.horoscope.chart import charts, house
+from jhora.panchanga import drik
 """
     1=> KN Rao method 
     2=> Parasara/PVN Rao Method - from https://vedicastrologer.org/articles/pp_chara_dasa.pdf
@@ -401,13 +402,14 @@ def _dhasa_progression_knrao_method(planet_positions):
 def get_dhasa_antardhasa(
     dob, tob, place,
     divisional_chart_factor=1, years=1, months=1, sixty_hours=1,
-    chara_method=1,              # 1 = Parāśara/PVN Rao (two cycles, 2nd = 12 - first)
+    chara_method=2,              # 1 = Parāśara/PVN Rao (two cycles, 2nd = 12 - first)
                                  # 2 = K.N. Rao (single cycle)
                                  # 3 = Rāghava Bhaṭṭa/Rangacharya - Method-1
                                  # 4 = Rāghava Bhaṭṭa/Rangacharya - Method-2
     gender=0,                    # 5 = Mind Sutra Method
     dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,  # 1..6 (1=Maha only, 2=+Antara [default], 3..6 deeper)
-    round_duration=True
+    round_duration=True,
+    **kwargs
 ):
     """
     Chara Daśā (sign-based), depth-enabled.
@@ -417,8 +419,8 @@ def get_dhasa_antardhasa(
         # 3 = Rāghava Bhaṭṭa/Rangacharya - Method-1. Ref: Jyotish Manual of Jaimini Astrology - Iranganti Rangacharya
         # 4 = Rāghava Bhaṭṭa/Rangacharya - Method-2. Ref: Jyotish Manual of Jaimini Astrology - Iranganti Rangacharya
         # 5 = Mind Sutra Method (Ref:https://sutramritam.blogspot.com/2009/08/chara-dasa-raghava-bhatta-nrisimha-suri.html) 
-            (Method 3/4 are also called Raghava Bhatta - Nrisimha Suri method)
-            And method=5 is given by Ref: https://sutramritam.blogspot.com/2009/08/chara-dasa-raghava-bhatta-nrisimha-suri.html
+            (Method 3/4 are also called Raghava Bhatta - Nrisimha Suri chara_method)
+            And chara_method=5 is given by Ref: https://sutramritam.blogspot.com/2009/08/chara-dasa-raghava-bhatta-nrisimha-suri.html
     gender=0, 0=Male, 1 = Female
     Depth control (replaces include_antardhasa):
       1 = MAHA_DHASA_ONLY      -> rows: (l1,               start_str, dur_years)
@@ -431,7 +433,7 @@ def get_dhasa_antardhasa(
     IMPORTANT: We do NOT re-implement any Chara logic. We only:
       - pick progression, durations, and cycles via your existing helpers based on `chara_method`;
       - split immediate parent into 12 equal parts at deeper levels;
-      - keep antardasha order exactly as `_antardhasa(dhasa_progression, method=...)` returns (global sequence).
+      - keep antardasha order exactly as `_antardhasa(dhasa_progression, chara_method=...)` returns (global sequence).
     """
     if not (1 <= dhasa_level_index <= 6):
         raise ValueError("dhasa_level_index must be in 1..6 (1=Maha .. 6=Deha).")
@@ -439,24 +441,24 @@ def get_dhasa_antardhasa(
     # --- Chart at birth epoch (as your current function does) -------------------
     jd_at_dob = utils.julian_day_number(dob, tob)
     planet_positions = charts.divisional_chart(jd_at_dob, place, 
-                                    divisional_chart_factor=divisional_chart_factor)[:const._pp_count_upto_ketu]
-    # --- Choose progression, duration function and cycles based on method -------
-    if chara_method == 1:
+                                    divisional_chart_factor=divisional_chart_factor,**kwargs)[:const._pp_count_upto_ketu]
+    # --- Choose progression, duration function and cycles based on dhasa_method -------
+    if chara_method == const.CHARA_TYPE.PVN_RAO:
         # Parāśara/PVN Rao: progression via PVN helper, durations via PVN helper, two cycles
         dhasa_progression = _dhasa_progression_pvnrao_method(planet_positions)
         duration_func     = _dhasa_duration_pvnrao_method
         cycles            = 2
         antardhasa_method     = 1
         antardhasa_function = None
-    elif chara_method == 2:
+    elif chara_method == const.CHARA_TYPE.KN_RAO:
         # K.N. Rao: progression via KN Rao helper, durations via KN Rao helper, single cycle
         dhasa_progression = _dhasa_progression_knrao_method(planet_positions)
         duration_func     = _dhasa_duration_knrao_method
         cycles            = 1
         antardhasa_method     = 2   # no rotation
         antardhasa_function = None
-    elif chara_method == 3:
-        # Iranganti – Method‑1 (Male-1); Female = book’s single method
+    elif chara_method == const.CHARA_TYPE.IRANGATTI_MALE1:
+        # Iranganti – Method‑1 (Male-1); Female = book’s single dhasa_method
         if gender == 0:
             dhasa_progression = _dhasa_progression_iranganti_m1_male(planet_positions)
             duration_func     = _dhasa_duration_iranganti_m1_male
@@ -467,8 +469,8 @@ def get_dhasa_antardhasa(
         antardhasa_method     = None   # not used; we drive via function below
         antardhasa_function   = _antardhasa_iranganti
 
-    elif chara_method == 4:
-        # Iranganti – Method‑2 (Male-2); Female = book’s single method
+    elif chara_method == const.CHARA_TYPE.IRANGATTI_MALE2:
+        # Iranganti – Method‑2 (Male-2); Female = book’s single dhasa_method
         if gender == 0:
             dhasa_progression = _dhasa_progression_iranganti_m2_male(planet_positions)
             duration_func     = _dhasa_duration_iranganti_m2_male
@@ -479,12 +481,12 @@ def get_dhasa_antardhasa(
         antardhasa_method     = None
         antardhasa_function   = _antardhasa_iranganti
 
-    elif chara_method == 5:
+    elif chara_method == const.CHARA_TYPE.MIND_SUTRA:
         # MindSutra variant (documented by Shanmukha; Jaimini Light)
         dhasa_progression = _dhasa_progression_mindsutra(planet_positions, gender)
         duration_func     = _dhasa_duration_mindsutra
         cycles            = 1
-        antardhasa_method   = None   # special handling in L2 for method 5
+        antardhasa_method   = None   # special handling in L2 for dhasa_method 5
         antardhasa_function = None
     else:
         raise ValueError("Unsupported chara_method. Use 1 (PVN), 2 (KNRao), or 3 (Raghava Bhatta).")
@@ -492,9 +494,6 @@ def get_dhasa_antardhasa(
     # --- Global antardasha sequence (exactly how your code does it) -------------
     # NOTE: This is *not* rotated per-parent. We keep your global sequence at every level.
     bhukthis_global = _antardhasa(dhasa_progression, method=antardhasa_method)
-    if antardhasa_method is not None:
-        bhukthis_global = _antardhasa(dhasa_progression, method=antardhasa_method)
-
     # --- Helpers ----------------------------------------------------------------
     _round_ndigits = getattr(const, 'DHASA_DURATION_ROUNDING_TO', 2)
 
@@ -516,9 +515,9 @@ def get_dhasa_antardhasa(
                 jd_cursor += child_unrounded * one_year_days
         else:
             for child_sign in bhukthis_global:
-                start_str = utils.julian_day_to_date_time_string(jd_cursor)
-                dur_ret   = round(child_unrounded, _round_ndigits) if round_duration else child_unrounded
-                _append(out_rows, prefix + (child_sign, start_str, dur_ret))
+                start_str = utils.jd_to_gregorian(jd_cursor)
+                dur_ret   = round(child_unrounded, dhasa_level_index+1) if round_duration else child_unrounded
+                _append(out_rows, (prefix + (child_sign,), start_str, dur_ret))
                 jd_cursor += child_unrounded * one_year_days
 
     # --- Build rows --------------------------------------------------------------
@@ -535,9 +534,9 @@ def get_dhasa_antardhasa(
 
             # L1: Maha only
             if dhasa_level_index == const.MAHA_DHASA_DEPTH.MAHA_DHASA_ONLY:
-                start_str = utils.julian_day_to_date_time_string(jd_cur)
-                dur_ret   = round(dd, _round_ndigits) if round_duration else dd
-                _append(rows, (lord, start_str, dur_ret))
+                start_str = utils.jd_to_gregorian(jd_cur)
+                dur_ret   = round(dd, dhasa_level_index+1) if round_duration else dd
+                _append(rows, ((lord,), start_str, dur_ret))
                 jd_cur += dd * one_year_days
                 continue
 
@@ -545,15 +544,15 @@ def get_dhasa_antardhasa(
             if dhasa_level_index == const.MAHA_DHASA_DEPTH.ANTARA:
                 ddb      = dd / 12.0
                 jd_b_ini = jd_cur
-                # --- Only change: pick Antardaśā order per method ---
+                # --- Only change: pick Antardaśā order per dhasa_method ---
                 if antardhasa_function is not None:
-                    bhuktis_order = antardhasa_function(lord)           # method 3/4: parent-specific padakrama
+                    bhuktis_order = antardhasa_function(lord)           # dhasa_method 3/4: parent-specific padakrama
                 else:
-                    bhuktis_order = bhukthis_global                 # method 1/2: your existing global sequence
+                    bhuktis_order = bhukthis_global                 # dhasa_method 1/2: your existing global sequence
                 for bhukthi in bhuktis_order:
-                    start_str = utils.julian_day_to_date_time_string(jd_b_ini)
-                    dur_ret   = round(ddb, _round_ndigits) if round_duration else ddb
-                    _append(rows, (lord, bhukthi, start_str, dur_ret))
+                    start_str = utils.jd_to_gregorian(jd_b_ini)
+                    dur_ret   = round(ddb, dhasa_level_index+1) if round_duration else ddb
+                    _append(rows, ((lord, bhukthi), start_str, dur_ret))
                     jd_b_ini += ddb * one_year_days
                 jd_cur += dd * one_year_days
                 continue
@@ -569,8 +568,272 @@ def get_dhasa_antardhasa(
             jd_cur += dd * one_year_days
 
     return rows
+def chara_immediate_children(
+    parent_lords,
+    parent_start,                # (Y, M, D, fractional_hour)
+    parent_duration=None,        # float years
+    parent_end=None,             # (Y, M, D, fractional_hour)
+    *,
+    jd_at_dob,
+    place,
+    chara_method: int = const.CHARA_TYPE.KN_RAO,       # 1=PVN Rao, 2=K.N. Rao, 3/4=Iranganti, 5=MindSutra
+    gender: int = 0,             # 0=Male, 1=Female (relevant for Iranganti)
+    divisional_chart_factor: int = 1,
+    years: int = 1, months: int = 1, sixty_hours: int = 1,
+    round_duration: bool = False,   # tiler uses exact split; return unrounded
+    **kwargs
+):
+    """
+    Chara — return ONLY the immediate (p -> p+1) children inside the given parent span.
+
+    • Equal split: child_years = parent_years / 12
+    • Order:
+        - Methods 1/2/5 → _antardhasa(dhasa_progression, method=…)
+        - Methods 3/4 → at Mahā (len(parent_lords)==1) use _antardhasa_iranganti(parent_sign),
+                        deeper levels fallback to global order
+    • Exact tiling of [parent_start, parent_end)
+    """
+    # ---- normalize lords path
+    if isinstance(parent_lords, int):
+        path = (parent_lords,)
+    elif isinstance(parent_lords, (list, tuple)) and parent_lords:
+        path = tuple(parent_lords)
+    else:
+        raise ValueError("parent_lords must be int or non-empty tuple/list of ints")
+    parent_sign = path[-1]
+    parent_depth = len(path)  # 1=Mahā, 2=Antara parent, etc.
+
+    # ---- tuple <-> JD
+    def _tuple_to_jd(t):
+        y, m, d, fh = t
+        return utils.julian_day_number(drik.Date(y, m, d), (fh, 0, 0))
+    def _jd_to_tuple(jd_val):
+        return utils.jd_to_gregorian(jd_val)
+
+    # ---- resolve parent span
+    start_jd = _tuple_to_jd(parent_start)
+    if (parent_duration is None) == (parent_end is None):
+        raise ValueError("Provide exactly one of parent_duration (years) or parent_end (tuple).")
+    YEAR = const.sidereal_year
+    if parent_end is None:
+        parent_years = float(parent_duration)
+        end_jd = start_jd + parent_years * YEAR
+    else:
+        end_jd = _tuple_to_jd(parent_end)
+        parent_years = (end_jd - start_jd) / YEAR
+
+    if end_jd <= start_jd:
+        return []
+
+    # ---- build progression + antardasha order per method (recompute locally)
+    planet_positions = charts.divisional_chart(
+        jd_at_dob, place, divisional_chart_factor=divisional_chart_factor,**kwargs
+    )[:const._pp_count_upto_ketu]
+
+    # Progression & duration func per method (we only need progression here)
+    if chara_method == const.CHARA_TYPE.PVN_RAO:
+        dhasa_progression = _dhasa_progression_pvnrao_method(planet_positions)
+        antardhasa_method = 1          # PVN global order
+        antardhasa_function = None
+    elif chara_method == const.CHARA_TYPE.KN_RAO:
+        dhasa_progression = _dhasa_progression_knrao_method(planet_positions)
+        antardhasa_method = 2          # KNRao global order
+        antardhasa_function = None
+    elif chara_method == const.CHARA_TYPE.IRANGATTI_MALE1:
+        if gender == 0:
+            dhasa_progression = _dhasa_progression_iranganti_m1_male(planet_positions)
+        else:
+            dhasa_progression = _dhasa_progression_iranganti_female(planet_positions)
+        antardhasa_method = None
+        antardhasa_function = _antardhasa_iranganti
+    elif chara_method == const.CHARA_TYPE.IRANGATTI_MALE2:
+        if gender == 0:
+            dhasa_progression = _dhasa_progression_iranganti_m2_male(planet_positions)
+        else:
+            dhasa_progression = _dhasa_progression_iranganti_female(planet_positions)
+        antardhasa_method = None
+        antardhasa_function = _antardhasa_iranganti
+    elif chara_method == const.CHARA_TYPE.MIND_SUTRA:
+        dhasa_progression = _dhasa_progression_mindsutra(planet_positions, gender)
+        antardhasa_method = 2          # MindSutra uses a fixed global order in your base
+        antardhasa_function = None
+    else:
+        raise ValueError("Unsupported chara_method (use 1..5).")
+
+    # Compute global order when applicable
+    bhukthis_global = None
+    if antardhasa_method is not None:
+        bhukthis_global = _antardhasa(dhasa_progression, method=antardhasa_method)
+
+    # Choose this node's order
+    if antardhasa_function is not None and parent_depth == 1:
+        # Iranganti: parent-specific padakrama at Mahā
+        bhukthis_order = antardhasa_function(parent_sign)
+    else:
+        # Global order for methods 1/2/5 and for deeper Iranganti levels
+        if bhukthis_global is None:
+            # Fallback if not computed (shouldn’t happen for 1/2/5)
+            bhukthis_global = _antardhasa(dhasa_progression, method=2)
+        bhukthis_order = bhukthis_global
+
+    # ---- equal split & tiling
+    child_years = parent_years / 12.0
+    children = []
+    cursor = start_jd
+    for idx, child_sign in enumerate(bhukthis_order):
+        if idx == 11:
+            child_end = end_jd
+        else:
+            child_end = cursor + child_years * YEAR
+        children.append([
+            path + (child_sign,),
+            _jd_to_tuple(cursor),
+            _jd_to_tuple(child_end),
+        ])
+        cursor = child_end
+        if cursor >= end_jd:
+            break
+
+    if children:
+        children[-1][2] = _jd_to_tuple(end_jd)
+    return children
+def get_running_dhasa_for_given_date(
+    current_jd,
+    jd_at_dob,
+    place,
+    dhasa_level_index=const.MAHA_DHASA_DEPTH.DEHA,
+    *,
+    chara_method: int = const.CHARA_TYPE.KN_RAO,              # 1..5
+    gender: int = 0,                    # 0=Male, 1=Female (Iranganti)
+    divisional_chart_factor: int = 1,
+    years: int = 1, months: int = 1, sixty_hours: int = 1,
+    round_duration: bool = False,       # runner uses exact tiling; rounding not needed
+    **kwargs
+):
+    """
+    Chara — narrow Mahā -> … -> target depth and return the full running ladder:
+
+      [
+        [(l1,),              start1, end1],
+        [(l1,l2),            start2, end2],
+        [(l1,l2,l3),         start3, end3],
+        [(l1,l2,l3,l4),      start4, end4],
+        [(l1,l2,l3,l4,l5),   start5, end5],
+        [(l1,l2,l3,l4,l5,l6),start6, end6],
+      ]
+    """
+
+    # ---- depth normalization
+    def _normalize_depth(depth_val):
+        try: depth = int(depth_val)
+        except Exception: depth = int(const.MAHA_DHASA_DEPTH.DEHA)
+        lo, hi = int(const.MAHA_DHASA_DEPTH.MAHA_DHASA_ONLY), int(const.MAHA_DHASA_DEPTH.DEHA)
+        return min(hi, max(lo, depth))
+    target_depth = _normalize_depth(dhasa_level_index)
+
+    # ---- helpers
+    def _tuple_to_jd(t):
+        y, m, d, fh = t
+        return utils.julian_day_number(drik.Date(y, m, d), (fh, 0, 0))
+    def _is_zero_length(s, e, eps_seconds=1.0):
+        return (_tuple_to_jd(e) - _tuple_to_jd(s)) * 86400.0 <= eps_seconds
+    def _to_utils_periods(children_rows, parent_end_tuple, eps_seconds=1.0):
+        filtered = [r for r in children_rows if not _is_zero_length(r[1], r[2], eps_seconds)]
+        if not filtered:
+            return []
+        filtered.sort(key=lambda r: _tuple_to_jd(r[1]))
+        proj, prev = [], None
+        for lords, st, _ in filtered:
+            sjd = _tuple_to_jd(st)
+            if prev is None or sjd > prev:
+                proj.append((lords, st)); prev = sjd
+        proj.append((proj[-1][0], parent_end_tuple))  # sentinel
+        return proj
+    def _as_tuple_lords(x):
+        return (x,) if isinstance(x, int) else tuple(x)
+
+    # ---- derive dob,tob for base L1 call
+    y, m, d, fh = utils.jd_to_gregorian(jd_at_dob)
+    dob = drik.Date(y, m, d); tob = (fh, 0, 0)
+
+    running_all = []
+
+    # ---- L1: Mahā via base get_dhasa_antardhasa (Chara)
+    maha_rows = get_dhasa_antardhasa(
+        dob, tob, place,
+        divisional_chart_factor=divisional_chart_factor,
+        years=years, months=months, sixty_hours=sixty_hours,
+        chara_method=chara_method,
+        gender=gender,
+        dhasa_level_index=const.MAHA_DHASA_DEPTH.MAHA_DHASA_ONLY,
+        round_duration=False,**kwargs
+    )
+    maha_for_utils = [(_as_tuple_lords(row[0]), row[1]) for row in maha_rows]
+
+    # Select running Mahā
+    rd1 = utils.get_running_dhasa_for_given_date(current_jd, maha_for_utils)
+    running = [_as_tuple_lords(rd1[0]), rd1[1], rd1[2]]
+    running_all.append(running)
+
+    if target_depth == int(const.MAHA_DHASA_DEPTH.MAHA_DHASA_ONLY):
+        return running_all
+
+    # ---- Levels 2..target
+    for depth in range(2, target_depth + 1):
+        parent_lords, parent_start, parent_end = running
+
+        children = chara_immediate_children(
+            parent_lords=parent_lords,
+            parent_start=parent_start,
+            parent_end=parent_end,
+            jd_at_dob=jd_at_dob,
+            place=place,
+            chara_method=chara_method,
+            gender=gender,
+            divisional_chart_factor=divisional_chart_factor,
+            years=years, months=months, sixty_hours=sixty_hours,
+            **kwargs
+        )
+        if not children:
+            # represent as zero-length at parent_end
+            running = [parent_lords + (parent_lords[-1],), parent_end, parent_end]
+            running_all.append(running)
+            break
+
+        periods_for_utils = _to_utils_periods(children, parent_end_tuple=parent_end)
+        if not periods_for_utils:
+            last = children[-1]
+            running = [last[0], last[1], last[1]]
+        else:
+            rdk = utils.get_running_dhasa_for_given_date(current_jd, periods_for_utils)
+            running = [_as_tuple_lords(rdk[0]), rdk[1], rdk[2]]
+
+        running_all.append(running)
+
+    return running_all
 
 if __name__ == "__main__":
+    utils.set_language('en')
+    dob = drik.Date(1996,12,7); tob = (10,34,0)
+    place = drik.Place('Chennai,IN', 13.0389, 80.2619, +5.5)    
+    jd_at_dob  = utils.julian_day_number(dob, tob)
+    from datetime import datetime
+    current_date_str,current_time_str = datetime.now().strftime('%Y,%m,%d;%H:%M:%S').split(';')
+    y,m,d = map(int,current_date_str.split(','))
+    hh,mm,ss = map(int,current_time_str.split(':')); fh = hh+mm/60+ss/3600
+    print(utils.date_time_tuple_to_date_time_string(y, m, d, fh))
+    current_jd = utils.julian_day_number(drik.Date(y,m,d),(hh,mm,ss))
+    import time
+    start_time = time.time()
+    print("Dehā        :", get_running_dhasa_for_given_date(current_jd, jd_at_dob, place,
+                                                            dhasa_level_index=const.MAHA_DHASA_DEPTH.DEHA))
+    print('new method elapsed time',time.time()-start_time)
+    start_time = time.time()
+    ad = get_dhasa_antardhasa(dob,tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.DEHA)
+    print(utils.get_running_dhasa_at_all_levels_for_given_date(current_jd, ad,const.MAHA_DHASA_DEPTH.DEHA,
+                                                               extract_running_period_for_all_levels=True))
+    print('old method elapsed time',time.time()-start_time)
+    exit()
     from jhora.tests import pvr_tests
     pvr_tests._STOP_IF_ANY_TEST_FAILED = True
     pvr_tests.chara_dhasa_test()

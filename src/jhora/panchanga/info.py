@@ -45,16 +45,21 @@ def get_panchangam_resources_basic(jd,place):
     place_str2 = ' ('+_lat+', '+_long+', '+str(place.timezone)+')'
     value += place_str2
     results_dict[key] = value
-    key = utils.resource_strings['vaaram_str']+': '
-    value = utils.DAYS_LIST[drik.vaara(jd)]
+    key = utils.resource_strings['civil_weekday_str']+': '
+    value = utils.DAYS_LIST[drik.vaara(jd,place,show_vedic_day=False)]
+    results_dict[key] = value
+    key = utils.resource_strings['vedic_weekday_str']+': '
+    value = utils.DAYS_LIST[drik.vaara(jd,place,show_vedic_day=True)]
     results_dict[key] = value
     date_str1 = str(year)+','+str(month)+','+str(day)
     date_str2 = str(day)+'-'+utils.MONTH_SHORT_LIST_EN[month-1]+'-'+str(year)
     time_str = utils.to_dms(birth_time_hrs)
     key = utils.resource_strings['date_of_birth_str']; value = date_str2+'  '+utils.resource_strings['time_of_birth_str']+' '+time_str
     results_dict[key] = value
-    keys = [utils.resource_strings['solar_str']+' '+utils.resource_strings['year_str']+'/'+utils.resource_strings['month_str'],utils.resource_strings['lunar_year_month_str'],utils.resource_strings['lunar_year_month_str']]
     _calendar_type_str = ['',' ('+utils.resource_strings['amantha_str']+')',' ('+utils.resource_strings['purnimantha_str']+')']
+    keys = [utils.resource_strings['solar_str']+' '+utils.resource_strings['year_str']+'/'+utils.resource_strings['month_str'],
+            utils.resource_strings['lunar_year_month_str']+_calendar_type_str[1],
+            utils.resource_strings['lunar_year_month_str']+_calendar_type_str[2]]
     for _calendar_type in range(3):
         _month,_day,_year,adhik_maasa,nija_maasa = drik.vedic_date(jd, place, calendar_type=_calendar_type)
         adhik_maasa_str = ''; nija_month_str = ''
@@ -65,7 +70,7 @@ def get_panchangam_resources_basic(jd,place):
         key = keys[_calendar_type]
         value = utils.YEAR_LIST[_year]+' / '+utils.MONTH_LIST[_month-1]+' '+ \
                         adhik_maasa_str+nija_month_str+' '+str(_day)
-        value += _calendar_type_str[_calendar_type]
+        #value += _calendar_type_str[_calendar_type]
         results_dict[key] = value
     key = utils.resource_strings['sunrise_str']
     value = drik.sunrise(jd,place)[1]
@@ -108,7 +113,7 @@ def get_panchangam_resources_basic(jd,place):
     results_dict[key] = value
     if rasi[1] < 24:
         _next_rasi = (rasi[0])%12+1
-        value = utils.RAASI_LIST[_next_rasi-1]+' '+utils.to_dms(rasi[1])+ ' ' + utils.resource_strings['starts_at_str']
+        value += '\n'+utils.RAASI_LIST[_next_rasi-1]+' '+utils.to_dms(rasi[1])+ ' ' + utils.resource_strings['starts_at_str']
         results_dict[key] = value
     key = utils.resource_strings['tithi_str']; _tithi = drik.tithi(jd, place)
     frac_left = 100*utils.get_fraction(_tithi[1], _tithi[2], birth_time_hrs)
@@ -254,7 +259,7 @@ def get_panchangam_resources_basic(jd,place):
     yv = drik.yogini_vaasa(jd, place)
     key = utils.resource_strings['yogini_vaasa_str']; value = utils.resource_strings[directions[yv]+'_str']
     results_dict[key] = value
-    ds = drik.disha_shool(jd)
+    ds = drik.disha_shool(jd,place)
     key = utils.resource_strings['disha_shool_str']; value = utils.resource_strings[directions[ds]+'_str']
     results_dict[key] = value
     car,ca_jd = drik.chandrashtama(jd, place); key = utils.resource_strings['chandrashtamam_str']

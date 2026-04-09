@@ -137,12 +137,14 @@ class PanchangaInfoDialog(QWidget):
             year,month,day = current_date_str.split(','); dob = drik.Date(int(year),int(month),int(day))
             tob = current_time_str.split(':')
             self.start_jd = utils.julian_day_number(dob, (int(tob[0]),int(tob[1]),int(tob[2])))
+        #"""
         if place is None and const.use_internet_for_location_check:
             loc = utils.get_place_from_user_ip_address()
             print('loc from IP address',loc)
             if len(loc)==4:
                 print('setting values from loc')
                 self.place= drik.Place(loc[0],loc[1],loc[2],loc[3])
+        #"""
         self.initUI()
         self.update_panchangam_info(self.start_jd,self.place)
     def set_language(self,language):

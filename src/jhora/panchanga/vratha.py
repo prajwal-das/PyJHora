@@ -163,7 +163,7 @@ def pradosham_dates(panchanga_place,panchanga_start_date,panchanga_end_date=None
         sunset = panchanga.sunset(cur_jd, panchanga_place)[2]
         pradosham_start = (sunset - jd_utc) * 24 + _tz+pradosham_sunset_offset[0]
         pradosham_end = (sunset - jd_utc) * 24 + _tz+pradosham_sunset_offset[1]
-        day = panchanga.vaara(cur_jd); tag = _pradosha_list[day]+' '+res['pradosham_str']+' / '+tag_t
+        day = panchanga.vaara(cur_jd,panchanga_place); tag = _pradosha_list[day]+' '+res['pradosham_str']+' / '+tag_t
         special_vratha_dates.append((pdate,pradosham_start,pradosham_end,tag))
         if panchanga_end_date is None :
             return special_vratha_dates
@@ -588,7 +588,7 @@ def _sankalpa_mantra(panchanga_date,panchanga_place,ritu_per_solar_tamil_month=c
     if tithi_index > 15:
         paksha = utils.PAKSHA_LIST[1].split()[0]
     tithi = utils.TITHI_LIST[tithi_index]
-    vasara = vasara_list[panchanga.vaara(jd)]
+    vasara = vasara_list[panchanga.vaara(jd,panchanga_place)]
     nakshathra = utils.NAKSHATRA_LIST[panchanga.nakshatra(jd, panchanga_place)[0]-1]
     """ TODO Solstice calculation not right - find shortest and logest days of year """
     solistice="dakshiNAyanE "
@@ -656,8 +656,8 @@ def _get_criteria_for_the_day(jd,place,use_purnimanta_system=None):
     _tithis = [_tithi_returned[0],_tithi_returned[3]] if len(_tithi_returned)>3 else [_tithi_returned[0]]
     _naks = panchanga.nakshatra(jd, place)
     _nak_ids = [_naks[0],_naks[3]] if len(_naks)>3 else [_naks[0]]
-    tm = None; td = None; adhik_maasa = None; _vaara = panchanga.vaara(jd)+1
-    day_id = panchanga.vaara(jd)
+    tm = None; td = None; adhik_maasa = None; _vaara = panchanga.vaara(jd,place)+1
+    day_id = panchanga.vaara(jd,place)
     if use_purnimanta_system is None:
         tm,td = panchanga.tamil_solar_month_and_date(date_in, place)
     else:
@@ -746,20 +746,11 @@ def get_festival(tithi=None, nakshatra=None, tamil_month=None, tamil_day=None,va
 
 if __name__ == "__main__":
     utils.set_language('en')
-    from jhora.tests import pvr_tests
-    place = panchanga.Place('Chennai,India',13.0878,80.2785,5.5)
-    start_date = panchanga.Date(2025,1,1); end_date = panchanga.Date(2025,12,31)
-    start_time = datetime.datetime.now()
-    fest_data = search(place,start_date,end_date,festival_name_contains='pongal')
-    for fdate,ftime,fest in fest_data:
-        print('fdate,fest',fdate,ftime,fest)
-    end_time = datetime.datetime.now()
-    print('cpu time ',end_time-start_time,' seconds')
-    exit()
-    dob = (1996,12,7) ; tob = (5,34,0); place = panchanga.Place('Chennai',13.0878,80.2785,5.5)
-    const.use_planet_speed_for_panchangam_end_timings = False
-    jd = utils.julian_day_number(start_date, tob)
-    print(panchanga.tithi(jd,place))
+    from datetime import datetime
+    _,current_time_str = datetime.now().strftime('%Y,%m,%d;%H:%M:%S').split(';')
+    hh,mm,ss = current_time_str.split(":")
+    dob = panchanga.Date(2026,3,14); tob = (int(hh),int(mm),int(ss)); place = panchanga.Place('Inverness,IL,USA',42.113275,-88.098433,-5.0)
+    jd = utils.julian_day_number(dob,tob)
     _festival_file = const._DATA_DIR +const._sep+'hindu_festivals_multilingual_unicode_bom.csv'
     load_festival_data(_festival_file)
     print(get_festivals_of_the_day(jd,place))
@@ -802,7 +793,7 @@ if __name__ == "__main__":
     for vdate in vdates:
         #print('vdate',vdate)
         jd = utils.julian_day_number(vdate[0], (9,0,0))
-        v = panchanga.vaara(jd)
+        v = panchanga.vaara(jd,place)
         adate = panchanga.Date(vdate[0][0],vdate[0][1],vdate[0][2])
         sdate = str(vdate[0][1])+'-'+str(vdate[0][2])+'-'+str(vdate[0][0])
         print(sdate+'\t'+utils.DAYS_LIST[v]+'\t'+vdate[2]+'\t upto '+vdate[1],'\n',_sankalpa_mantra(adate,place,ritu_per_solar_tamil_month=False))

@@ -29,7 +29,7 @@
 import json
 import os
 import re
-
+from jhora import utils
 # -----------------------------
 # Internal test/run flags
 # -----------------------------
@@ -298,46 +298,112 @@ def _align_structure_for_compare(expected, actual):
 # ==========================
 # Test functions (exported)
 # ==========================
-def test_example(test_description, expected_result, actual_result, *extra_data_info):
+def test_example(test_description, expected_result, actual_result, *extra_data_info, convert_date_tuple_to_string=True):
     global _total_tests, _failed_tests, _failed_tests_str, _STOP_IF_ANY_TEST_FAILED, _assert_result
 
+    # ---- helpers (REPLACE your previous helpers with these) ----
+    def _is_int(n):
+        # Avoid bools (since bool is a subclass of int)
+        return isinstance(n, int) and not isinstance(n, bool)
+
+    def _is_num(n):
+        return (isinstance(n, (int, float)) and not isinstance(n, bool))
+
+    def _looks_like_date_tuple(value):
+        """
+        Strictly validate a (y, m, d, h) structure:
+        - year: 4-digit integer, 1000..9999
+        - month: integer 1..12
+        - day: integer 1..31
+        - hour: numeric 0 <= h < 24 (float allowed)
+        """
+        if not (isinstance(value, (list, tuple)) and len(value) == 4):
+            return False
+        y, m, d, h = value
+        if not (_is_int(y) and 1000 <= y <= 9999):
+            return False
+        if not (_is_int(m) and 1 <= m <= 12):
+            return False
+        if not (_is_int(d) and 1 <= d <= 31):
+            return False
+        if not (_is_num(h) and 0 <= float(h) < 24):
+            return False
+        return True
+
+    def _convert_date_like(value):
+        """Convert (y,m,d,h) -> string via utils.date_time_tuple_to_date_time_string, using strict guards."""
+        if not convert_date_tuple_to_string:
+            return value
+        try:
+            if _looks_like_date_tuple(value):
+                y, m, d, h = value
+                return utils.date_time_tuple_to_date_time_string(int(y), int(m), int(d), float(h))
+        except Exception:
+            # Fail-safe: if conversion fails, leave as-is
+            pass
+        return value
+
+    def _normalize_dates(obj):
+        """Recursively convert any (y,m,d,h) date-like tuple/list into the required string form."""
+        converted = _convert_date_like(obj)
+        if converted is not obj:
+            return converted
+
+        if isinstance(obj, dict):
+            return {k: _normalize_dates(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [_normalize_dates(v) for v in obj]
+        elif isinstance(obj, tuple):
+            return tuple(_normalize_dates(v) for v in obj)
+        elif isinstance(obj, set):
+            return {_normalize_dates(v) for v in obj}
+        else:
+            return obj
+    # ---- end helpers ----
+
+    # ... keep the rest of your function exactly as in the previous version ...
     next_num = _total_tests + 1
     should_run = _subset_should_run(next_num, str(test_description))
-
-    # Always consume the test number to preserve alignment (important for compare mode keyed by numbers)
     _total_tests = next_num
 
     if not should_run:
         if _subset_verbose_skip:
             print(f"Skip Test#:{next_num} {test_description}")
         return
-    # ... (rest of your function continues unchanged; use 'key = str(next_num)' now)
+
     key = str(next_num)
-    # (proceed with record/compare/none branches)
-    # RECORD mode: write expected/actual for this test number
+
+    normalized_expected = _normalize_dates(expected_result)
+    normalized_actual = _normalize_dates(actual_result)
+    normalized_extra = _normalize_dates(list(extra_data_info)) if extra_data_info else ""
+
     if _BASELINE_MODE.lower() == 'record':
         data = _simple_read_json()
-        to_write = actual_result if _BASELINE_WRITE_MODE == 'actual' else expected_result
+        to_write = normalized_actual if _BASELINE_WRITE_MODE == 'actual' else normalized_expected
         data[key] = [
             str(test_description),
             _to_jsonable(to_write),
-            _to_jsonable(list(extra_data_info)) if extra_data_info else ""
+            _to_jsonable(normalized_extra) if normalized_extra != "" else ""
         ]
         _simple_write_json(data)
         print(f"Writing {test_description} ({_BASELINE_WRITE_MODE}) Test#:{_total_tests} -> BASELINE_FILE")
         return
 
-    # COMPARE mode: load expected and align structure to actual
     if _BASELINE_MODE.lower() == 'compare':
         data = _simple_read_json()
         if key in data:
             _, expected_from_file, _ = data[key]
-            expected_result = _align_structure_for_compare(expected_from_file, actual_result)
+            normalized_expected = _normalize_dates(expected_from_file)
+            normalized_actual = _normalize_dates(actual_result)
+            normalized_expected = _align_structure_for_compare(normalized_expected, normalized_actual)
 
-    # Original behavior
+    expected_result = normalized_expected
+    actual_result = normalized_actual
+
     assert_result = _assert_result
     if len(extra_data_info) == 0:
         extra_data_info = ''
+
     if assert_result:
         if expected_result == actual_result:
             print('Test#:'+str(_total_tests), test_description, "Expected:", expected_result, "Actual:", actual_result, 'Test Passed', extra_data_info)
@@ -418,6 +484,221 @@ def compare_lists_within_tolerance(test_description, expected_list, actual_list,
             raise SystemExit(1)
     else:
         print('Test#:'+str(_total_tests), test_description, "Expected:", expected_list, "Actual:", actual_list, status_str, extra_data_info)
+
+import re
+
+def compare_longitudes_within_tolerance(test_description, expected_list, actual_list, tolerance=_tolerance, *extra_data_info):
+    """
+    Compare lists of longitudes within a tolerance (in DEGREES), supporting:
+      - Zodiac string:
+          "23Aq03"              -> 23° Aquarius + 03'
+          "23Aq03'12.13"        -> 23° Aquarius + 03' + 12.13"
+          "23Aq03.12.13"        -> 23° Aquarius + 03' + 12.13" (dot form)
+          '23Aq03.12.13"'       -> same, trailing double-quote accepted
+      - Plain numeric degrees in [0, 360) as float or numeric string, e.g., 172.376576 or "172.376576"
+
+    Behavior mirrors `compare_lists_within_tolerance`:
+      - 'record': write expected/actual list per test number (as-is)
+      - 'compare': override expected list from baseline, align structure, then compare circularly
+      - 'none': behave like original
+
+    Tolerance is in degrees. Circular difference is used: min(|a-b|, 360-|a-b|).
+    """
+    # ---- globals from your test harness ----
+    global _total_tests, _failed_tests, _failed_tests_str, _STOP_IF_ANY_TEST_FAILED, _assert_result
+    # Expects these to exist:
+    #   _subset_should_run, _subset_verbose_skip, _simple_read_json, _simple_write_json,
+    #   _to_jsonable, _align_structure_for_compare, _BASELINE_MODE, _BASELINE_WRITE_MODE
+
+    # ----------------- helpers -----------------
+    _SIGN_OFFSETS = {
+        # Aries .. Pisces (0..330 by 30°)
+        "ar": 0,     "ari": 0,     "aries": 0,
+        "ta": 30,    "tau": 30,    "taurus": 30,
+        "ge": 60,    "gem": 60,    "gemini": 60,
+        "cn": 90,    "can": 90,    "cancer": 90,
+        "le": 120,   "leo": 120,
+        "vi": 150,   "vir": 150,   "virgo": 150,
+        "li": 180,   "lib": 180,   "libra": 180,
+        "sc": 210,   "sco": 210,   "scorpio": 210,
+        "sg": 240,   "sag": 240,   "sagittarius": 240,
+        "cp": 270,   "cap": 270,   "capricorn": 270,
+        "aq": 300,   "aqu": 300,   "aquarius": 300,
+        "pi": 330,   "pis": 330,   "pisces": 330,
+    }
+
+    def _normalize_0_360(x):
+        x = float(x) % 360.0
+        return x if x >= 0 else x + 360.0
+
+    def _circular_abs_diff(a, b):
+        diff = (abs(float(a) - float(b)) % 360.0)
+        return diff if diff <= 180.0 else 360.0 - diff
+
+    def _strip_trailing_quotes(s):
+        # Remove common seconds quotes if present: "  or Unicode ″ (U+2033)
+        return s.rstrip().rstrip('"').rstrip('″').rstrip()
+
+    def _parse_longitude_value(v):
+        """
+        Convert a single value into degrees [0,360).
+        Accepts:
+          - float/int
+          - numeric string "172.376576"
+          - "<deg><Sign><min>"
+          - "<deg><Sign><min>'<sec>"
+          - "<deg><Sign><min>.<sec>" or "<deg><Sign><min>.<ss>.<frac>"
+            (e.g., "23Aq03.12.13" -> min=3, sec=12.13)
+          - Optional trailing double-quote in dot form is tolerated: ...12.13"
+        """
+        # Numeric fast path
+        if isinstance(v, (int, float)):
+            return _normalize_0_360(float(v))
+
+        if not isinstance(v, str):
+            raise ValueError(f"Unsupported longitude type: {type(v)} -> {v}")
+
+        s = v.strip()
+        # Try numeric string
+        try:
+            num = float(s)
+            return _normalize_0_360(num)
+        except Exception:
+            pass
+
+        # Find the sign token (letters)
+        m = re.search(r'([A-Za-z]{2,})', s)
+        if not m:
+            raise ValueError(f"Cannot parse longitude (no sign, not numeric): '{v}'")
+
+        deg_str = s[:m.start()].strip()
+        sign_str = s[m.start():m.end()].strip().lower()
+        rest = s[m.end():].strip()
+
+        if not deg_str:
+            raise ValueError(f"Missing degrees before sign in '{v}'")
+        try:
+            deg_in_sign = int(deg_str)
+        except Exception:
+            raise ValueError(f"Invalid degrees portion before sign in '{v}'")
+
+        if sign_str not in _SIGN_OFFSETS:
+            raise ValueError(f"Unknown zodiac sign in '{v}': '{sign_str}'")
+        base = _SIGN_OFFSETS[sign_str]
+
+        # Defaults
+        minutes = 0
+        seconds = 0.0
+
+        if rest:
+            # Normalize trailing quotes first (for dot form)
+            rest_clean = _strip_trailing_quotes(rest).replace('"', '').replace('″', '').strip()
+
+            if "'" in rest_clean:
+                # Apostrophe form: "<min>'<sec>"
+                mins_part, sec_part = rest_clean.split("'", 1)
+                mins_part = mins_part.strip()
+                sec_part = sec_part.strip()
+                if mins_part:
+                    minutes = int(mins_part)
+                if sec_part:
+                    seconds = float(sec_part)
+            elif "." in rest_clean:
+                # Dot form: "<min>.<sec>" or "<min>.<ss>.<frac>"
+                parts = [p for p in rest_clean.split('.') if p != '']
+                if len(parts) >= 1:
+                    minutes = int(parts[0])
+                if len(parts) >= 2:
+                    # Reconstruct seconds possibly with fractional portion
+                    seconds = float(parts[1] + ('.' + ''.join(parts[2:]) if len(parts) > 2 else ''))
+            else:
+                # Minutes only
+                minutes = int(rest_clean)
+
+        # Normalize minutes/seconds overflow (tolerant)
+        total_in_sign = float(deg_in_sign) + (float(minutes) / 60.0) + (float(seconds) / 3600.0)
+        if total_in_sign < 0:
+            raise ValueError(f"Negative longitude component in '{v}' leads to negative total within sign.")
+
+        abs_deg = base + total_in_sign
+        return _normalize_0_360(abs_deg)
+
+    # --------------- main body (mirrors your baseline flow) ----------------
+    next_num = _total_tests + 1
+    should_run = _subset_should_run(next_num, str(test_description))
+    _total_tests = next_num  # always consume number to preserve alignment
+    key = str(next_num)
+
+    if not should_run:
+        if _subset_verbose_skip:
+            print(f"Skip Test#:{next_num} {test_description}")
+        return
+
+    # RECORD mode
+    if _BASELINE_MODE.lower() == 'record':
+        data = _simple_read_json()
+        to_write = actual_list if _BASELINE_WRITE_MODE == 'actual' else expected_list
+        data[key] = [
+            str(test_description),
+            _to_jsonable(to_write),
+            _to_jsonable(list(extra_data_info)) if extra_data_info else ""
+        ]
+        _simple_write_json(data)
+        print(f"Writing {test_description} ({_BASELINE_WRITE_MODE}) Test#:{_total_tests} -> BASELINE_FILE")
+        return
+
+    # COMPARE mode: override expected and align if needed
+    if _BASELINE_MODE.lower() == 'compare':
+        data = _simple_read_json()
+        if key in data:
+            _, expected_from_file, _ = data[key]
+            expected_list = _align_structure_for_compare(expected_from_file, actual_list)
+
+    # Length check
+    assert len(expected_list) == len(actual_list), \
+        f"Length mismatch for test '{test_description}': expected {len(expected_list)} vs actual {len(actual_list)}"
+
+    # Parse to normalized degrees
+    try:
+        exp_deg = [_parse_longitude_value(x) for x in expected_list]
+        act_deg = [_parse_longitude_value(x) for x in actual_list]
+    except Exception as e:
+        raise AssertionError(
+            f"Parsing error in '{test_description}': {e}\n"
+            f"expected_list={expected_list}\nactual_list={actual_list}"
+        )
+
+    # Circular comparison
+    try:
+        diffs = [_circular_abs_diff(exp_deg[i], act_deg[i]) for i in range(len(act_deg))]
+        test_passed = all(d <= float(tolerance) for d in diffs)
+    except Exception as e:
+        raise AssertionError(
+            f"Comparison error in '{test_description}': {e}\n"
+            f"parsed_expected={exp_deg}\nparsed_actual={act_deg}"
+        )
+
+    status_str = f"Test Passed within tolerance={tolerance}°" if test_passed \
+                 else f"Test Failed within tolerance={tolerance}°"
+
+    if not test_passed:
+        _failed_tests += 1
+        _failed_tests_str += str(_total_tests) + ';'
+        print('Test#:' + str(_total_tests), test_description,
+              "Expected:", expected_list,
+              "Actual:", actual_list,
+              status_str,
+              f"diffs(deg)={['{:.6f}'.format(d) for d in diffs]}",
+              extra_data_info)
+        if _STOP_IF_ANY_TEST_FAILED:
+            print("Stopping the execution due to the failed test")
+            raise SystemExit(1)
+    else:
+        print('Test#:' + str(_total_tests), test_description,
+              "Expected:", expected_list,
+              "Actual:", actual_list,
+              status_str,
+              extra_data_info)
 
 # -----------------------------
 # Optional: One-time sanitizer

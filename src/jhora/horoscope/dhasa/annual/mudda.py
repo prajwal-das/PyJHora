@@ -122,7 +122,8 @@ def compute_varsha_vimsottari_antara_from(jd, mahadashas):
 
 
 def varsha_vimsottari_dhasa_bhukthi(
-    jd, place, years,
+    jd, place,
+    years: int = 1, months: int = 1, sixty_hours: int = 1,
     divisional_chart_factor=1,
     chart_method=1,
     dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,  # 1..6 (1=Maha, 2=+Antara [default], 3..6 deeper)
@@ -160,12 +161,6 @@ def varsha_vimsottari_dhasa_bhukthi(
         chart_method=chart_method
     )
 
-    _round_ndigits = getattr(const, 'DHASA_DURATION_ROUNDING_TO', 2)
-
-    def _fmt(jdx):
-        # Keep your module’s unified timestamp style
-        return utils.julian_day_to_date_time_string(jdx)
-
     def _children_planetary(parent_lord, parent_start_jd, parent_dur_days):
         """
         Split 'parent_dur_days' among 9 children using classical Varsha‑Vimshottari weights:
@@ -189,8 +184,8 @@ def varsha_vimsottari_dhasa_bhukthi(
                 _recurse(level + 1, clord, cstart, cdur, prefix + (clord,), out_rows)
         else:
             for clord, cstart, cdur in _children_planetary(parent_lord, parent_start_jd, parent_dur_days):
-                dur_ret = round(cdur, _round_ndigits) if round_duration else cdur
-                out_rows.append(prefix + (clord, _fmt(cstart), dur_ret))
+                dur_ret = round(cdur, dhasa_level_index+1) if round_duration else cdur
+                out_rows.append((prefix + (clord,), utils.jd_to_gregorian(cstart), dur_ret))
 
     dhasa_bukthi = []
 
@@ -198,16 +193,16 @@ def varsha_vimsottari_dhasa_bhukthi(
 
         # L1: Maha only
         if dhasa_level_index == const.MAHA_DHASA_DEPTH.MAHA_DHASA_ONLY:
-            dur_ret = round(maha_dur_days, _round_ndigits) if round_duration else maha_dur_days
-            dhasa_bukthi.append((maha_lord, _fmt(maha_start), dur_ret))
+            dur_ret = round(maha_dur_days, dhasa_level_index+1) if round_duration else maha_dur_days
+            dhasa_bukthi.append(((maha_lord,), utils.jd_to_gregorian(maha_start), dur_ret))
             continue
 
         # L2: Antara (uses your existing bhukti function for exact legacy timings)
         if dhasa_level_index == const.MAHA_DHASA_DEPTH.ANTARA:
             bhuktis = varsha_vimsottari_bhukti(maha_lord, maha_start)
             for bhukthi_lord, bhukthi_start, bhukthi_durn in bhuktis:
-                dur_ret = round(bhukthi_durn, _round_ndigits) if round_duration else bhukthi_durn
-                dhasa_bukthi.append((maha_lord, bhukthi_lord, _fmt(bhukthi_start), dur_ret))
+                dur_ret = round(bhukthi_durn, dhasa_level_index+1) if round_duration else bhukthi_durn
+                dhasa_bukthi.append(((maha_lord, bhukthi_lord), utils.jd_to_gregorian(bhukthi_start), dur_ret))
             continue
 
         # L3..L6: planetary recursion with weights (durations in days)
@@ -225,8 +220,245 @@ def varsha_vimsottari_dhasa_bhukthi(
 def mudda_dhasa_bhukthi(jd,place,years,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,divisional_chart_factor=1):
     return varsha_vimsottari_dhasa_bhukthi(jd,place,years,dhasa_level_index=dhasa_level_index,
                                            divisional_chart_factor=divisional_chart_factor)
+def mudda_immediate_children(
+    parent_lords,
+    parent_start,                # (Y, M, D, fractional_hour)
+    parent_duration=None,        # float years (provide exactly one of: duration OR end)
+    parent_end=None,             # (Y, M, D, fractional_hour)
+    **kwargs):
+    return varsha_vimsottari_immediate_children(parent_lords, parent_start, parent_duration, parent_end,**kwargs)
+def varsha_vimsottari_immediate_children(
+    parent_lords,
+    parent_start,                # (Y, M, D, fractional_hour)
+    parent_duration=None,        # float years (provide exactly one of: duration OR end)
+    parent_end=None,             # (Y, M, D, fractional_hour)
+    *,
+    jd_at_dob,
+    place,
+    divisional_chart_factor: int = 1,
+    years: int = 1, months: int = 1, sixty_hours: int = 1,
+    year_duration: float = const.sidereal_year,
+    round_duration: bool = False,    # tiler returns exact spans; keep unrounded here
+):
+    """
+    Varsha Vimshottari (Mudda) — return ONLY the immediate (parent -> children) splits.
+
+      [ (lords_tuple_{k+1}, start_tuple, end_tuple), ... ]
+
+    Strategy:
+      • Ask the base for depth = len(parent_lords)+1.
+      • Filter rows that belong to the given parent path.
+      • Keep only children whose span intersects the parent span.
+      • Clamp the last child to the parent's end; exact tiling (no rounding).
+    """
+    # normalize parent path
+    if isinstance(parent_lords, int):
+        path = (int(parent_lords),)
+    elif isinstance(parent_lords, (tuple, list)) and parent_lords:
+        path = tuple(int(x) for x in parent_lords)
+    else:
+        raise ValueError("parent_lords must be int or non-empty tuple/list")
+    k = len(path)   # parent level (L1 -> 1, L2 -> 2, ...)
+
+    # tuple <-> JD
+    def _t2jd(t):
+        y, m, d, fh = t
+        return utils.julian_day_number(drik.Date(y, m, d), (fh, 0, 0))
+    def _jd2t(jd):
+        return utils.jd_to_gregorian(jd)
+
+    # resolve parent span
+    start_jd = _t2jd(parent_start)
+    if (parent_duration is None) == (parent_end is None):
+        raise ValueError("Provide exactly one of parent_duration (years) or parent_end (tuple)")
+    if parent_end is None:
+        parent_years = float(parent_duration)
+        end_jd = start_jd + parent_years * year_duration
+    else:
+        end_jd = _t2jd(parent_end)
+        parent_years = (end_jd - start_jd) / year_duration
+    if end_jd <= start_jd:
+        return []
+
+    # reconstruct dob/tob from JD @ birth
+    y0, m0, d0, fh0 = utils.jd_to_gregorian(jd_at_dob)
+    dob = drik.Date(y0, m0, d0); tob = (fh0, 0, 0)
+
+    # ask base for depth = k+1 (unrounded)
+    rows = varsha_vimsottari_dhasa_bhukthi(
+        dob, tob, place,
+        divisional_chart_factor=divisional_chart_factor,
+        years=years, months=months, sixty_hours=sixty_hours,
+        dhasa_level_index=k+1,
+        round_duration=False
+    ) or []
+
+    # Extract only the children under this parent path and intersecting the span
+    kids, OUT = [], []
+    for (lords_tuple, child_start_t, dur_years) in rows:
+        if tuple(lords_tuple[:k]) != path:
+            continue
+        cst = _t2jd(child_start_t)
+        cen = cst + float(dur_years) * year_duration
+        # keep only if intersects [start_jd, end_jd]
+        if cen > start_jd and cst < end_jd:
+            kids.append((tuple(lords_tuple), cst, cen))
+
+    if not kids:
+        return []
+
+    # sort by start JD & tile; clamp last child's end to parent end
+    kids.sort(key=lambda r: r[1])
+    for i, (lt, cst, cen) in enumerate(kids):
+        st = max(cst, start_jd)
+        en = min(cen, end_jd) if i < len(kids) - 1 else end_jd
+        if en > st:
+            OUT.append((lt, _jd2t(st), _jd2t(en)))
+
+    return OUT
+def get_running_dhasa_for_given_date(
+    current_jd,
+    jd_at_dob,
+    place,
+    dhasa_level_index=const.MAHA_DHASA_DEPTH.DEHA,   # 1..6
+    *,
+    divisional_chart_factor: int = 1,
+    years: int = 1, months: int = 1, sixty_hours: int = 1,
+    year_duration: float = const.sidereal_year,
+    round_duration: bool = False,                    # runner uses exact spans; keep unrounded here
+):
+    """
+    Varsha Vimshottari (Mudda) — running ladder at `current_jd`:
+
+      [
+        [(L1,),                  start1, end1],
+        [(L1,L2),                start2, end2],
+        ...
+        [(L1,..,L_d),            startd, endd]
+      ]
+
+    Simple zero-duration handling:
+      • Skip only `duration <= 0` rows when building selector period lists.
+      • Append a sentinel end to the last period at each depth.
+      • If the *last* Mahā has `duration <= 0` and `current_jd` is beyond the previous end,
+        you may raise a terminal error (edge case you described).
+    """
+    # depth normalization
+    def _norm(x):
+        try: d = int(x)
+        except Exception: d = int(const.MAHA_DHASA_DEPTH.DEHA)
+        lo = int(const.MAHA_DHASA_DEPTH.MAHA_DHASA_ONLY)
+        hi = int(const.MAHA_DHASA_DEPTH.DEHA)
+        return min(hi, max(lo, d))
+    target = _norm(dhasa_level_index)
+
+    # tuple <-> JD
+    def _t2jd(t):
+        y, m, d, fh = t
+        return utils.julian_day_number(drik.Date(y, m, d), (fh, 0, 0))
+    def _jd2t(jd):
+        return utils.jd_to_gregorian(jd)
+
+    # L1 via base (unrounded)
+    y0, m0, d0, fh0 = utils.jd_to_gregorian(jd_at_dob)
+    dob = drik.Date(y0, m0, d0); tob = (fh0, 0, 0)
+
+    l1_rows = varsha_vimsottari_dhasa_bhukthi(
+        jd_at_dob, place,
+        divisional_chart_factor=divisional_chart_factor,
+        years=years, months=months, sixty_hours=sixty_hours,
+        dhasa_level_index=const.MAHA_DHASA_DEPTH.MAHA_DHASA_ONLY,
+        round_duration=False
+    ) or []
+
+    # Build (lords,start)+sentinel — skip ONLY duration <= 0
+    periods, jd_cursor = [], jd_at_dob
+    for (lords_tuple, start_tuple, dur_years) in l1_rows:
+        dur = float(dur_years)
+        if dur <= 0.0:
+            continue
+        L1 = int(lords_tuple[0]) if isinstance(lords_tuple, (list, tuple)) else int(lords_tuple)
+        periods.append(((L1,), start_tuple))
+        jd_cursor = _t2jd(start_tuple) + dur * year_duration
+
+    if not periods:
+        sentinel = _jd2t(jd_at_dob)
+        return [[(), sentinel, sentinel]]
+
+    periods.append((periods[-1][0], _jd2t(jd_cursor)))  # sentinel
+
+    # Running Mahā
+    rd1 = utils.get_running_dhasa_for_given_date(current_jd, periods)
+    running = [tuple(rd1[0]), rd1[1], rd1[2]]
+    ladder  = [running]
+
+    if target == int(const.MAHA_DHASA_DEPTH.MAHA_DHASA_ONLY):
+        return ladder
+
+    # Deeper: expand the running parent each time using the immediate-children helper
+    for depth in range(2, target + 1):
+        parent_lords, parent_start, parent_end = running
+
+        kids = varsha_vimsottari_immediate_children(
+            parent_lords=parent_lords,
+            parent_start=parent_start,
+            parent_end=parent_end,
+            jd_at_dob=jd_at_dob,
+            place=place,
+            divisional_chart_factor=divisional_chart_factor,
+            years=years, months=months, sixty_hours=sixty_hours,
+            year_duration=year_duration,
+            round_duration=False
+        )
+        if not kids:
+            # If no children, collapse to a degenerate final rung
+            ladder.append((parent_lords + (parent_lords[-1],), parent_end, parent_end))
+            break
+
+        # Convert children rows to selector periods (lords, start) + sentinel end
+        child_periods = []
+        for lt, st, en in kids:
+            if _t2jd(en) > _t2jd(st):
+                child_periods.append((lt, st))
+        if not child_periods:
+            ladder.append((parent_lords + (parent_lords[-1],), parent_end, parent_end))
+            break
+        child_periods.append((child_periods[-1][0], parent_end))  # sentinel
+
+        rdk = utils.get_running_dhasa_for_given_date(current_jd, child_periods)
+        running = [tuple(rdk[0]), rdk[1], rdk[2]]
+        ladder.append(running)
+
+    return ladder
+
 '------ main -----------'
 if __name__ == "__main__":
+    utils.set_language('en')
+    dob = drik.Date(1996,12,7); tob = (10,34,0)
+    place = drik.Place('Chennai,IN', 13.0389, 80.2619, +5.5)    
+    jd_at_dob  = utils.julian_day_number(dob, tob)
+    from datetime import datetime
+    current_date_str,current_time_str = datetime.now().strftime('%Y,%m,%d;%H:%M:%S').split(';')
+    y,m,d = map(int,current_date_str.split(','))
+    hh,mm,ss = map(int,current_time_str.split(':')); fh = hh+mm/60+ss/3600
+    print(utils.date_time_tuple_to_date_time_string(y, m, d, fh))
+    current_jd = utils.julian_day_number(drik.Date(y,m,d),(hh,mm,ss))
+    DLI = const.MAHA_DHASA_DEPTH.MAHA_DHASA_ONLY
+    import time
+    start_time = time.time()
+    print("Dehā        :", get_running_dhasa_for_given_date(current_jd, jd_at_dob, place,
+                                                            dhasa_level_index=DLI))
+    print('new method elapsed time',time.time()-start_time)
+    start_time = time.time()
+    _years = utils.jd_to_gregorian(current_jd)[0]-utils.jd_to_gregorian(jd_at_dob)[0]-1
+    ad = varsha_vimsottari_dhasa_bhukthi(jd_at_dob, place,dhasa_level_index=DLI,years=_years)
+    for row in ad:
+        lords,ds,dur = row
+        print([utils.PLANET_NAMES[lord] for lord in lords],ds,dur)
+    print(utils.get_running_dhasa_at_all_levels_for_given_date(current_jd, ad,DLI,
+                                                               extract_running_period_for_all_levels=True))
+    print('old method elapsed time',time.time()-start_time)
+    exit()
     from jhora.tests import pvr_tests
     pvr_tests._STOP_IF_ANY_TEST_FAILED = True
     pvr_tests.mudda_varsha_vimsottari_tests()

@@ -67,8 +67,6 @@ def set_sideral_planets():
     planet_list = _sidereal_planet_list
     
 #PLANET_NAMES= ['Suriyan', 'Chandran', 'Sevvay','Budhan','Viyaazhan','VeLLi','Sani','Raahu','Kethu','Uranus','Neptune']
-_ayanamsa_mode = const._DEFAULT_AYANAMSA_MODE
-_ayanamsa_value = None
 def _ayanamsa_surya_siddhantha_model(jd):
     maha_yuga_years = 4320000
     completed_maha_yuga_years = 3888000
@@ -111,14 +109,15 @@ def get_ayanamsa_value(jd):
         @param jd: Julian Day Number
         @return: ayanamsa value - ayanamsa for the day based on the model used. 
     """
-    global _ayanamsa_mode,_ayanamsa_value
-    #print('Drik:get_ayanamsa_value',_ayanamsa_mode,_ayanamsa_value)
-    key = _ayanamsa_mode.lower()
-    if key =='sidm_user' or key =='senthil' or key == 'sundar_ss':
-        #print(key,'returning',_ayanamsa_value)
+    key = const._DEFAULT_AYANAMSA_MODE#_ayanamsa_mode.lower()
+    if key.lower() =='sidm_user':
+        _ayanamsa_value = swe.get_ayanamsa(jd)
         return _ayanamsa_value
+    elif key.lower() =='senthil':
+        return _calculate_ayanamsa_senthil_from_jd(jd)
+    elif key.lower() == 'sundar_ss':
+        return _ayanamsa_surya_siddhantha_model(jd)
     else:
-        #set_ayanamsa_mode(_ayanamsa_mode,_ayanamsa_value,jd)
         _ayanamsa_value = swe.get_ayanamsa(jd)
         return _ayanamsa_value
 def set_ayanamsa_mode(ayanamsa_mode = None,ayanamsa_value=None,jd=None):
@@ -134,23 +133,22 @@ def set_ayanamsa_mode(ayanamsa_mode = None,ayanamsa_value=None,jd=None):
         @return None
     """
     if ayanamsa_mode is None: ayanamsa_mode = const._DEFAULT_AYANAMSA_MODE
-    global _ayanamsa_mode,_ayanamsa_value
     key = ayanamsa_mode.upper()
-    #print('panchanga setting',key,ayanamsa_value,jd)
     if key in [am.upper() for am in const.available_ayanamsa_modes.keys()]:
         if key == "SIDM_USER":
-            _ayanamsa_value = ayanamsa_value
-            swe.set_sid_mode(swe.SIDM_USER,ayanamsa_value)
+            swe.set_sid_mode(swe.SIDM_USER,t0=jd,ayan_t0=ayanamsa_value)
         elif key == "SENTHIL":
             _ayanamsa_value = _calculate_ayanamsa_senthil_from_jd(jd)
+            swe.set_sid_mode(swe.SIDM_USER,t0=jd,ayan_t0=_ayanamsa_value)
         elif key == "SUNDAR_SS":
             _ayanamsa_value = _ayanamsa_surya_siddhantha_model(jd)
+            swe.set_sid_mode(swe.SIDM_USER,t0=jd,ayan_t0=_ayanamsa_value)
         else:
             swe.set_sid_mode(const.available_ayanamsa_modes[key])
     else:
         print(ayanamsa_mode,"Unsupported Ayanamsa mode:",const._DEFAULT_AYANAMSA_MODE+" Assumed")
         ayanamsa_mode = const._DEFAULT_AYANAMSA_MODE
-        swe.set_sid_mode(const.available_ayanamsa_modes[const._DEFAULT_AYANAMSA_MODE] )#swe.SIDM_LAHIRI)
+        swe.set_sid_mode(const.available_ayanamsa_modes[const._DEFAULT_AYANAMSA_MODE] )
     _ayanamsa_mode = ayanamsa_mode
     const._DEFAULT_AYANAMSA_MODE = _ayanamsa_mode
 reset_ayanamsa_mode = lambda: swe.set_sid_mode(const.available_ayanamsa_modes[const._DEFAULT_AYANAMSA_MODE]) \
@@ -226,21 +224,17 @@ def sidereal_longitude(jd_utc, planet):
         @param planet: index of the planet Use const._SUN, const._RAHU etc.
         @return: the sidereal longitude of the planet (0-360 degrees)
     """
-    global _ayanamsa_mode,_ayanamsa_value
     _ayanamsa_default = const._DEFAULT_AYANAMSA_MODE
     if const._TROPICAL_MODE:
         flags = swe.FLG_SWIEPH
     else:
         flags = PLANET_FLAGS #swe.FLG_SWIEPH | swe.FLG_SIDEREAL | _rise_flags
-        set_ayanamsa_mode(_ayanamsa_default,_ayanamsa_value,jd_utc); _ayanamsa_mode = const._DEFAULT_AYANAMSA_MODE
     if planet == const._KETU:
         longi,_ = swe.calc_ut(jd_utc, const._RAHU, flags = flags)
         ketu_long = (longi[0]+180)%360
-        reset_ayanamsa_mode()
         return ketu_long
     else:
         longi,_ = swe.calc_ut(jd_utc, planet, flags = flags)
-    reset_ayanamsa_mode()
     return utils.norm360(longi[0]) # degrees
 def planets_in_retrograde(jd,place):
     """
@@ -255,13 +249,10 @@ def planets_in_retrograde(jd,place):
     global planet_list
     jd_utc = jd - place.timezone / 24.
     flags = PLANET_FLAGS # swe.FLG_SWIEPH | swe.FLG_SIDEREAL | _rise_flags
-    set_ayanamsa_mode(_ayanamsa_mode,_ayanamsa_value,jd)
     retro_planets = []
     _planet_list = {p:p_id for p,p_id in planet_list.items() if p not in [const._RAHU, const._KETU]}
     for planet,p_id in _planet_list.items():
-        #p_id = _sidereal_planet_list.index(planet)
         longi,_ = swe.calc_ut(jd_utc, planet, flags = flags)
-        reset_ayanamsa_mode()
         if longi[3]<0 : retro_planets.append(p_id)
     return retro_planets
 def _planet_speed_info(jd, place,planet):
@@ -290,16 +281,13 @@ def planets_speed_info(jd,place):
     round_factors = [3,3,4,3,3,6]
     jd_utc = jd - place.timezone / 24.
     flags = PLANET_FLAGS # swe.FLG_SWIEPH | swe.FLG_SIDEREAL | _rise_flags
-    set_ayanamsa_mode(_ayanamsa_mode,_ayanamsa_value,jd)
     _planets_speed_info = {}
     for planet,planet_index in planet_list.items():
         if planet_index==const.KETU_ID:#planet == const._KETU:
             _planets_speed_info[planet_index] = _planets_speed_info[planet_list[const._RAHU]]
             continue
         longi,_ = swe.calc_ut(jd_utc, planet, flags = flags)
-        reset_ayanamsa_mode()
         _planets_speed_info[planet_index] = [round(l,round_factors[i]) for i,l in enumerate(longi)]
-        #print(planet_index, planet,_planets_speed_info[planet])
     return _planets_speed_info
 def planets_in_graha_yudh(jd,place):
     """
@@ -903,7 +891,40 @@ def karana(jd, place):
     else: # first of tithi
         _k_start = _t_start; _k_end = _t_mid
     return _karana,_k_start,_k_end
-def vaara(jd):
+def civil_weekday(jd):
+    """
+        returns civil Weekday (local midnight to midnight)
+        @param jd: Julian Day Number of the date/time
+        @return: day of the date
+          0 = Sunday, 1 = Monday,..., 6 = Saturday
+    """
+    return math.floor(jd+1.5)%7
+def vedic_weekday(jd, place):
+    """
+        returns Vedic Weekday (sunrise to sunrise)
+        @param jd: Julian Day Number of the date/time
+        @param place Place(city,latitude,longitude,timezone_hours)
+        @return: day of the date
+          0 = Sunday, 1 = Monday,..., 6 = Saturday
+    """
+    cw = civil_weekday(jd)
+    t_local_hour = utils.jd_to_gregorian(jd)[-1]
+    sr = sunrise(jd, place)
+    sunrise_local_hour = float(sr[0])
+    return (cw - 1) % 7 if t_local_hour < sunrise_local_hour else cw
+def vaara(jd,place,show_vedic_day=True):
+    """
+        Weekday for given Julian day. 
+        @param jd: Julian Day Number of the date/time
+        @param place Place(city,latitude,longitude,timezone_hours)
+        @param show_vedic_day
+            True will return day based sunrise to sunrise. (Default)
+            False will return civil day (local midnight to midnight)
+        @return: day of the date
+          0 = Sunday, 1 = Monday,..., 6 = Saturday
+    """
+    return vedic_weekday(jd, place) if show_vedic_day else civil_weekday(jd)
+def _vaara(jd):
     """
         Weekday for given Julian day. 
         @param jd: Julian Day Number of the date/time
@@ -1076,6 +1097,23 @@ def next_lunar_month(jd, place,lunar_month_type=0,direction=1):
         @param lunar_month_type: 0=>Amantha 1=>Purnimantha 2=>Solar month
     """
     if lunar_month_type==2:
+        lmy,lmm,lmd,lmh = (utils.jd_to_gregorian(next_planet_entry_date(const.SUN_ID, jd, place)[0]) if direction==1 
+                            else utils.jd_to_gregorian(previous_planet_entry_date(0, jd, place)[0]))
+        return Date(lmy,lmm,lmd),lmh
+    if lunar_month_type==0:
+        ncp_jd,_,_ = next_conjunction_of_planet_pair(jd,place, const.SUN_ID, const.MOON_ID, separation_angle=0.0,
+                                              direction=direction)
+        return utils.jd_to_gregorian(ncp_jd)
+    else:
+        ncp_jd,_,_ = next_conjunction_of_planet_pair(jd,place, const.SUN_ID, const.MOON_ID, separation_angle=180.0,
+                                              direction=direction)
+        return utils.jd_to_gregorian(ncp_jd)
+    
+def _next_lunar_month(jd, place,lunar_month_type=0,direction=1):
+    """
+        @param lunar_month_type: 0=>Amantha 1=>Purnimantha 2=>Solar month
+    """
+    if lunar_month_type==2:
         lmy,lmm,lmd,lmh = utils.jd_to_gregorian(next_planet_entry_date(0, jd, place)[0]) if direction==1 else \
                           utils.jd_to_gregorian(previous_planet_entry_date(0, jd, place)[0])
         return Date(lmy,lmm,lmd),lmh
@@ -1097,8 +1135,24 @@ def previous_lunar_month(jd, place,lunar_month_type=0,direction=-1):
         @param lunar_month_type: 0=>Amantha 1=>Purnimantha 2=>Solar month
     """
     if lunar_month_type==2:
-        lmy,lmm,lmd,lmh = utils.jd_to_gregorian(next_planet_entry_date(0, jd, place)[0]) if direction==1 else \
-                          utils.jd_to_gregorian(previous_planet_entry_date(0, jd, place)[0])
+        lmy,lmm,lmd,lmh = (utils.jd_to_gregorian(next_planet_entry_date(const.SUN_ID, jd, place)[0]) if direction==1 
+                            else utils.jd_to_gregorian(previous_planet_entry_date(0, jd, place)[0]))
+        return Date(lmy,lmm,lmd),lmh
+    if lunar_month_type==0:
+        ncp_jd,_,_ = next_conjunction_of_planet_pair(jd,place, const.SUN_ID, const.MOON_ID, separation_angle=0.0,
+                                              direction=direction)
+        return utils.jd_to_gregorian(ncp_jd)
+    else:
+        ncp_jd,_,_ = next_conjunction_of_planet_pair(jd,place, const.SUN_ID, const.MOON_ID, separation_angle=180.0,
+                                              direction=direction)
+        return utils.jd_to_gregorian(ncp_jd)
+def _previous_lunar_month(jd, place,lunar_month_type=0,direction=-1):
+    """
+        @param lunar_month_type: 0=>Amantha 1=>Purnimantha 2=>Solar month
+    """
+    if lunar_month_type==2:
+        lmy,lmm,lmd,lmh = (utils.jd_to_gregorian(next_planet_entry_date(const.SUN_ID, jd, place)[0]) if direction==1 
+                            else utils.jd_to_gregorian(previous_planet_entry_date(0, jd, place)[0]))
         return Date(lmy,lmm,lmd),lmh
     _tithi_to_check = 30 if lunar_month_type==0 else 15
     tithi_ = tithi(jd,place)[0]
@@ -1156,7 +1210,7 @@ def gauri_choghadiya(jd, place):
     srise = sunrise(jd, place); sset = sunset(jd,place,gauri_choghadiya_setting=True)
     day_dur = (sset[0] - srise[0])/24
     end_times = []; start_time = srise[1]
-    _vaara = vaara(jd)
+    _vaara = vaara(jd,place)
     for i in range(1, 9):
         gt = srise[2]+(i*day_dur)/8; _,_,_,fh = utils.jd_to_gregorian(gt); end_time = utils.to_dms(fh)
         gc_type = const.gauri_choghadiya_day_table[_vaara][i-1]
@@ -1185,7 +1239,7 @@ def shubha_hora(jd, place):
     srise = sunrise(jd, place); sset = sunset(jd,place,gauri_choghadiya_setting=True)
     day_dur = (sset[0] - srise[0])/24
     end_times = []; start_time = srise[1]
-    _vaara = vaara(jd)
+    _vaara = vaara(jd,place)
     for i in range(1, 13):
         gt = srise[2]+(i*day_dur)/12; _,_,_,fh = utils.jd_to_gregorian(gt); end_time = utils.to_dms(fh)
         gc_type = const.shubha_hora_day_table[i-1][_vaara]
@@ -1216,7 +1270,7 @@ def trikalam(jd, place, option='raahu kaalam'):
     """
     srise = sunrise(jd, place)[0] # V4.3.0
     day_dur = day_length(jd, place)
-    weekday = vaara(jd)
+    weekday = vaara(jd,place)
     
     # value in each array is for given weekday (0 = sunday, etc.)
     offsets = { 'raahu kaalam': [0.875, 0.125, 0.75, 0.5, 0.625, 0.375, 0.25],
@@ -1245,7 +1299,7 @@ def durmuhurtam(jd, place):
     # Night = today's sunset to tomorrow's sunrise
     srise = sunrise(jd, place)[0]; day_dur = day_length(jd,place); night_dur = night_length(jd,place)
     sset = sunset(jd,place)[0]
-    weekday = vaara(jd)
+    weekday = vaara(jd,place)
     
     # There is one durmuhurtam on Sun, Wed, Sat; the rest have two
     # Offsets from sunrise 10.4 means 6 + 10.4 = 16.4 = 4:24 PM
@@ -1440,14 +1494,12 @@ def bhaava_madhya_swe(jd,place,house_code='P'):
         warnings.warn(warn_msg)
         house_code = 'P'
     hsys = bytes(house_code,encoding='ascii')
-    global _ayanamsa_mode,_ayanamsa_value
     _, lat, lon, tz = place
     jd_utc = jd - (tz / 24.)
     if const._TROPICAL_MODE:
         flags = swe.FLG_SWIEPH
     else:
         flags = swe.FLG_SIDEREAL
-        set_ayanamsa_mode(_ayanamsa_mode,_ayanamsa_value,jd) # needed for swe.houses_ex()
     return list(swe.houses_ex(jd_utc, lat, lon,hsys, flags = flags)[0])
 def bhaava_madhya_kp(jd,place):
     """
@@ -1455,14 +1507,12 @@ def bhaava_madhya_kp(jd,place):
         0th element is ascendant, 9th element is mid-heaven (mid coeli) etc 
         KP is same as Swiss ephemeris Placidus method
     """
-    global _ayanamsa_mode,_ayanamsa_value
     _, lat, lon, tz = place
     jd_utc = jd - (tz / 24.)
     if const._TROPICAL_MODE:
         flags = swe.FLG_SWIEPH
     else:
         flags = swe.FLG_SIDEREAL
-        set_ayanamsa_mode(_ayanamsa_mode,_ayanamsa_value,jd) # needed for swe.houses_ex()
     return list(swe.houses_ex(jd_utc, lat, lon, hsys=b'P', flags = flags)[0])
 def bhaava_madhya_bv_raman(jd, place, divisional_chart_factor=1):
     bm = bhaava_madhya_swe(jd, place, house_code='S')
@@ -1493,26 +1543,23 @@ def bhaava_madhya_sripathi(jd, place, divisional_chart_factor=1):
         bm[(bi2-1)%12] = (bm[bi2%12]-bd)%360
         #print((bi1+1)%12,bm[(bi1+1)%12],(bi2-1)%12,bm[(bi2-1)%12])
     return bm
-def ascendant(jd, place):
+def ascendant(jd, place,dhasa_progression_correction=0.0):
     """
         Compute Lagna (=ascendant) position/longitude at any given time & place
         @param jd: Julian Day Number of the date/time
         @param place: Place as struct ('Place',latitude,longitude,timezone)
         @return: [constellation of Lagna, longitude of lagna, Lagna nakshatra number, Lagna paadham number]
     """
-    global _ayanamsa_mode,_ayanamsa_value
     _, lat, lon, tz = place
     jd_utc = jd - (tz / 24.)
     if const._TROPICAL_MODE:
         flags = swe.FLG_SWIEPH
     else:
         flags = swe.FLG_SWIEPH | swe.FLG_SIDEREAL | _rise_flags
-        set_ayanamsa_mode(_ayanamsa_mode,_ayanamsa_value,jd) # needed for swe.houses_ex()
-    nirayana_lagna = swe.houses_ex(jd_utc, lat, lon, flags = flags)[1][0]
+    nirayana_lagna = utils.norm360(swe.houses_ex(jd_utc, lat, lon, flags = flags)[1][0]+dhasa_progression_correction)
     nak_no,paadha_no,_ = nakshatra_pada(nirayana_lagna)
     constellation = int(nirayana_lagna / 30)
     coordinates = nirayana_lagna-constellation*30
-    reset_ayanamsa_mode()
     return [constellation, coordinates, nak_no, paadha_no]    
 def dasavarga_from_long(longitude, divisional_chart_factor=1):
     """
@@ -1580,7 +1627,8 @@ def _dhasavarga(jd, place,divisional_chart_factor=1):
         divisional_chart = dasavarga_from_long(nirayana_long,divisional_chart_factor)
         positions.append([p_id, divisional_chart])
     return positions
-def dhasavarga(jd, place,divisional_chart_factor=1,set_rahu_ketu_as_true_nodes=True,include_western_planets=None):
+def dhasavarga(jd, place,divisional_chart_factor=1,set_rahu_ketu_as_true_nodes=True,include_western_planets=None,
+               dhasa_progression_correction=0.0):
     """
         Calculate planet positions for a given divisional chart index
         @param jd: Julian Day Number of the date/time
@@ -1605,12 +1653,12 @@ def dhasavarga(jd, place,divisional_chart_factor=1,set_rahu_ketu_as_true_nodes=T
     positions = []
     for planet,p_id in planet_list.items():
         if p_id==const.KETU_ID: continue
-        nirayana_long = sidereal_longitude(jd_utc, planet)
+        nirayana_long = utils.norm360(sidereal_longitude(jd_utc, planet)+dhasa_progression_correction)
         divisional_chart = dasavarga_from_long(nirayana_long,divisional_chart_factor)
         positions.append([p_id, divisional_chart])
         if p_id == const.RAHU_ID:
             p_id = planet_list[const._KETU]
-            ketu_long = (nirayana_long+180)%360
+            ketu_long = utils.norm360(nirayana_long+180)
             divisional_chart = dasavarga_from_long(ketu_long,divisional_chart_factor)
             positions.append([p_id, divisional_chart])
     positions = sorted(positions, key=lambda x: -1 if x[0] == 'L' else x[0])
@@ -1681,31 +1729,44 @@ def solar_upagraha_longitudes(solar_longitude,upagraha,divisional_chart_factor=1
   Kaala rises at the middle of Sun’s part. In other words, we find the time at the
   middle of Sun’s part and find lagna rising then. That gives Kaala’s longitude.
 """
-kaala_longitude = lambda dob,tob,place,divisional_chart_factor=1: \
-    upagraha_longitude(dob,tob,place,planet_index=0,
-                       divisional_chart_factor=divisional_chart_factor,upagraha_part='middle')
+kaala_longitude = (
+    lambda dob,tob,place,divisional_chart_factor=1,dhasa_progression_correction=0.0:
+    upagraha_longitude(dob,tob,place,planet_index=0,divisional_chart_factor=divisional_chart_factor,
+                       upagraha_part='middle',dhasa_progression_correction=dhasa_progression_correction)
+    )
 """ Mrityu rises at the middle of Mars’s part."""
-mrityu_longitude = lambda dob,tob,place,divisional_chart_factor=1: \
-    upagraha_longitude(dob,tob,place,planet_index=2,
-                       divisional_chart_factor=divisional_chart_factor,upagraha_part='middle')
+mrityu_longitude = (
+    lambda dob,tob,place,divisional_chart_factor=1,dhasa_progression_correction=0.0:
+    upagraha_longitude(dob,tob,place,planet_index=2,divisional_chart_factor=divisional_chart_factor,
+                       upagraha_part='middle',dhasa_progression_correction=dhasa_progression_correction)
+    )
 """ Artha Praharaka rises at the middle of Mercury’s part."""
-artha_praharaka_longitude = lambda dob,tob,place,divisional_chart_factor=1: \
-    upagraha_longitude(dob,tob,place,planet_index=3,
-                       divisional_chart_factor=divisional_chart_factor,upagraha_part='middle')
+artha_praharaka_longitude = (
+    lambda dob,tob,place,divisional_chart_factor=1,dhasa_progression_correction=0.0:
+    upagraha_longitude(dob,tob,place,planet_index=3,divisional_chart_factor=divisional_chart_factor,
+                       upagraha_part='middle',dhasa_progression_correction=dhasa_progression_correction)
+    )
 """ Yama Ghantaka rises at the middle of Jupiter’s part. """
-yama_ghantaka_longitude = lambda dob,tob,place,divisional_chart_factor=1: \
-    upagraha_longitude(dob,tob,place,planet_index=4,
-                       divisional_chart_factor=divisional_chart_factor,upagraha_part='middle')
+yama_ghantaka_longitude = (
+    lambda dob,tob,place,divisional_chart_factor=1,dhasa_progression_correction=0.0:
+    upagraha_longitude(dob,tob,place,planet_index=4,divisional_chart_factor=divisional_chart_factor,
+                       upagraha_part='middle',dhasa_progression_correction=dhasa_progression_correction)
+    )
 """ Gulika rises at the start of Saturn’s part. (Book says middle) """
-gulika_longitude = lambda dob,tob,place,divisional_chart_factor=1: \
-    upagraha_longitude(dob,tob,place,planet_index=6,
-                       divisional_chart_factor=divisional_chart_factor,upagraha_part='begin')
+gulika_longitude = (
+    lambda dob,tob,place,divisional_chart_factor=1,dhasa_progression_correction=0.0:
+    upagraha_longitude(dob,tob,place,planet_index=6,divisional_chart_factor=divisional_chart_factor,
+                       upagraha_part='begin',dhasa_progression_correction=dhasa_progression_correction)
+    )
 """ Maandi rises at the middle of Saturn’s part. (Book says start) """
-maandi_longitude = lambda dob,tob,place,divisional_chart_factor=1: \
-    upagraha_longitude(dob,tob,place,planet_index=6,
-                       divisional_chart_factor=divisional_chart_factor,upagraha_part='middle')
+maandi_longitude = (
+    lambda dob,tob,place,divisional_chart_factor=1,dhasa_progression_correction=0.0:
+    upagraha_longitude(dob,tob,place,planet_index=6,divisional_chart_factor=divisional_chart_factor,
+                       upagraha_part='middle',dhasa_progression_correction=dhasa_progression_correction)
+    )
 
-def upagraha_longitude(dob,tob,place,planet_index,divisional_chart_factor=1,upagraha_part='middle'):
+def upagraha_longitude(dob,tob,place,planet_index,divisional_chart_factor=1,upagraha_part='middle',
+                       dhasa_progression_correction=0.0):
     """
       get upagraha longitude from dob,tob, place-lat/long and day/night ruling planet's part
       @param dob Date of birth as Date(year,month,day)
@@ -1740,7 +1801,8 @@ def upagraha_longitude(dob,tob,place,planet_index,divisional_chart_factor=1,upag
               Upagraha longitudes are based on sunrise times - how does sunrise time change in div charts?
     """
     jd_utc = utils.gregorian_to_jd(Date(dob.year,dob.month,dob.day))
-    day_number = vaara(jd_utc)
+    jd = utils.julian_day_number(Date(dob.year,dob.month,dob.day),(tob[0],tob[1],tob[2]))
+    day_number = vaara(jd,place)
     srise = sunrise(jd_utc, place)[1]
     srise = [int(ss) for ss in srise.replace(' AM','').replace(' PM','').split(':')]
     sset = sunset(jd_utc, place)[1]
@@ -1770,32 +1832,45 @@ def upagraha_longitude(dob,tob,place,planet_index,divisional_chart_factor=1,upag
         jd_kaala = swe.julday(dob.year,dob.month,dob.day,planet_start_time)
     """ TODO Get Ascendant of div chart here below"""
     clong = ascendant(jd_kaala, place) #2.0.3
-    upagraha_long = clong[0]*30+clong[1] #2.0.3
+    upagraha_long = utils.norm360(clong[0]*30+clong[1] + dhasa_progression_correction)
     constellation,coordinates = dasavarga_from_long(upagraha_long, divisional_chart_factor) #int(upagraha_long / 30)
     return [constellation,coordinates]
 """ NOTE: Bhava Lagna Calculation in Section 5.2 of PVR Book should have mentioned DIVIDE BY 4 in Step (2) """
-bhava_lagna = lambda jd,place,divisional_chart_factor=1,chart_method=1,\
-                                            base_rasi=None,count_from_end_of_sign=None: \
-        special_ascendant(jd,place,divisional_chart_factor=divisional_chart_factor,\
-                          chart_method=chart_method,lagna_rate_factor=0.25,
-                          base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign) 
-hora_lagna = lambda jd,place,divisional_chart_factor=1,chart_method=1,\
-                                            base_rasi=None,count_from_end_of_sign=None: \
-        special_ascendant(jd,place,divisional_chart_factor=divisional_chart_factor,\
+bhava_lagna = (
+    lambda jd, place, divisional_chart_factor=1, chart_method=1,base_rasi=None, count_from_end_of_sign=None,
+           dhasa_progression_correction=0.0:
+        special_ascendant(
+            jd,place,divisional_chart_factor=divisional_chart_factor,chart_method=chart_method,lagna_rate_factor=0.25,
+            base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign,
+            dhasa_progression_correction=dhasa_progression_correction)
+        )
+hora_lagna = (
+    lambda jd,place,divisional_chart_factor=1,chart_method=1,base_rasi=None,count_from_end_of_sign=None,
+                                            dhasa_progression_correction=0.0: 
+        special_ascendant(jd,place,divisional_chart_factor=divisional_chart_factor,
                           chart_method=chart_method,lagna_rate_factor=0.5,
-                          base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign) 
-ghati_lagna = lambda jd,place,divisional_chart_factor=1,chart_method=1,\
-                                            base_rasi=None,count_from_end_of_sign=None: \
-        special_ascendant(jd,place,divisional_chart_factor=divisional_chart_factor,\
+                          base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign,
+                          dhasa_progression_correction=dhasa_progression_correction)
+        )
+ghati_lagna = (
+    lambda jd,place,divisional_chart_factor=1,chart_method=1,base_rasi=None,count_from_end_of_sign=None,
+                                            dhasa_progression_correction=0.0: 
+        special_ascendant(jd,place,divisional_chart_factor=divisional_chart_factor,
                           chart_method=chart_method,lagna_rate_factor=1.25,
-                          base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign) 
-vighati_lagna = lambda jd,place,divisional_chart_factor=1,chart_method=1,\
-                                            base_rasi=None,count_from_end_of_sign=None: \
-        special_ascendant(jd,place,divisional_chart_factor=divisional_chart_factor,\
+                          base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign,
+                          dhasa_progression_correction=dhasa_progression_correction)
+        ) 
+vighati_lagna = (
+    lambda jd,place,divisional_chart_factor=1,chart_method=1,base_rasi=None,count_from_end_of_sign=None,
+                                            dhasa_progression_correction=0.0: 
+        special_ascendant(jd,place,divisional_chart_factor=divisional_chart_factor,
                           chart_method=chart_method,lagna_rate_factor=15.0,
-                          base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign) 
+                          base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign,
+                          dhasa_progression_correction=dhasa_progression_correction)
+        ) 
 def special_ascendant(jd,place,divisional_chart_factor=1,chart_method=1,
-                      lagna_rate_factor=1.0,base_rasi=None,count_from_end_of_sign=None):
+                      lagna_rate_factor=1.0,base_rasi=None,count_from_end_of_sign=None,
+                      dhasa_progression_correction=0.0):
     """
         Get constellation and longitude of special lagnas (Bhava,Hora,Ghati,vighati)
         @param jd: Julian day number
@@ -1832,25 +1907,42 @@ def special_ascendant(jd,place,divisional_chart_factor=1,chart_method=1,
     jd_at_sunrise = srise[2]+place.timezone/24
     pp = charts.divisional_chart(jd_at_sunrise, place, 
             divisional_chart_factor=divisional_chart_factor,chart_method=chart_method,base_rasi=base_rasi,
-            count_from_end_of_sign=count_from_end_of_sign)[:const._pp_count_upto_ketu]
+            count_from_end_of_sign=count_from_end_of_sign,
+            dhasa_progression_correction=dhasa_progression_correction)[:const._pp_count_upto_ketu]
     sun_long = pp[1][1][0]*30+pp[1][1][1]
     spl_long = (sun_long + (time_diff_mins * lagna_rate_factor) ) % 360
     da = dasavarga_from_long(spl_long, divisional_chart_factor)
     return da
-bhava_lagna_mixed_chart = lambda jd,place,varga_factor_1=1,chart_method_1=1,varga_factor_2=1,chart_method_2=1: \
+bhava_lagna_mixed_chart = (
+    lambda jd,place,varga_factor_1=1,chart_method_1=1,varga_factor_2=1,chart_method_2=1,
+                            dhasa_progression_correction=0.0: 
         special_ascendant_mixed_chart(jd,place,varga_factor_1=varga_factor_1,chart_method_1=chart_method_1,
-                          varga_factor_2=varga_factor_2,chart_method_2=chart_method_2,lagna_rate_factor=0.25) 
-hora_lagna_mixed_chart = lambda jd,place,varga_factor_1=1,chart_method_1=1,varga_factor_2=1,chart_method_2=1: \
+                          varga_factor_2=varga_factor_2,chart_method_2=chart_method_2,lagna_rate_factor=0.25,
+                          dhasa_progression_correction=dhasa_progression_correction) 
+        )
+hora_lagna_mixed_chart = (
+    lambda jd,place,varga_factor_1=1,chart_method_1=1,varga_factor_2=1,chart_method_2=1,
+        dhasa_progression_correction=0.0:
         special_ascendant_mixed_chart(jd,place,varga_factor_1=varga_factor_1,chart_method_1=chart_method_1,
-                          varga_factor_2=varga_factor_2,chart_method_2=chart_method_2,lagna_rate_factor=0.5) 
-ghati_lagna_mixed_chart = lambda jd,place,varga_factor_1=1,chart_method_1=1,varga_factor_2=1,chart_method_2=1: \
+                          varga_factor_2=varga_factor_2,chart_method_2=chart_method_2,lagna_rate_factor=0.5,
+                          dhasa_progression_correction=dhasa_progression_correction)
+        )
+ghati_lagna_mixed_chart = (
+    lambda jd,place,varga_factor_1=1,chart_method_1=1,varga_factor_2=1,chart_method_2=1,
+                dhasa_progression_correction=0.0:
         special_ascendant_mixed_chart(jd,place,varga_factor_1=varga_factor_1,chart_method_1=chart_method_1,
-                          varga_factor_2=varga_factor_2,chart_method_2=chart_method_2,lagna_rate_factor=1.25) 
-vighati_lagna_mixed_chart = lambda jd,place,varga_factor_1=1,chart_method_1=1,varga_factor_2=1,chart_method_2=1: \
+                          varga_factor_2=varga_factor_2,chart_method_2=chart_method_2,lagna_rate_factor=1.25,
+                          dhasa_progression_correction=dhasa_progression_correction) 
+        )
+vighati_lagna_mixed_chart = (
+    lambda jd,place,varga_factor_1=1,chart_method_1=1,varga_factor_2=1,chart_method_2=1,
+                    dhasa_progression_correction=0.0:
         special_ascendant_mixed_chart(jd,place,varga_factor_1=varga_factor_1,chart_method_1=chart_method_1,
-                          varga_factor_2=varga_factor_2,chart_method_2=chart_method_2,lagna_rate_factor=15.0) 
+                          varga_factor_2=varga_factor_2,chart_method_2=chart_method_2,lagna_rate_factor=15.0,
+                          dhasa_progression_correction=dhasa_progression_correction) 
+        )
 def special_ascendant_mixed_chart(jd,place,varga_factor_1=1,chart_method_1=1,varga_factor_2=1,chart_method_2=1,
-                                  lagna_rate_factor=1.0):
+                                  lagna_rate_factor=1.0,dhasa_progression_correction=0.0):
     mixed_dvf = varga_factor_1*varga_factor_2
     _,_,_, time_of_birth_in_hours = jd_to_gregorian(jd)
     srise = sunrise(jd, place) #V2.3.1 Get sunrise JD - as we need sun longitude at sunrise
@@ -1863,18 +1955,21 @@ def special_ascendant_mixed_chart(jd,place,varga_factor_1=1,chart_method_1=1,var
         Since sunrise function returns JD Local at sunrise we add local time here because charts will minus it to get UTC
     """
     jd_at_sunrise = srise[2]+place.timezone/24
-    pp = charts.mixed_chart(jd_at_sunrise, place, varga_factor_1, chart_method_1, varga_factor_2, chart_method_2)
+    pp = charts.mixed_chart(jd_at_sunrise, place, varga_factor_1, chart_method_1, varga_factor_2, chart_method_2,
+                            dhasa_progression_correction=dhasa_progression_correction)
     sun_long = pp[1][1][0]*30+pp[1][1][1]
     spl_long = (sun_long + (time_diff_mins * lagna_rate_factor) ) % 360
     da = dasavarga_from_long(spl_long, mixed_dvf)
     return da    
-def pranapada_lagna_mixed_chart(jd,place,varga_factor_1=1,chart_method_1=1,varga_factor_2=1,chart_method_2=1):
+def pranapada_lagna_mixed_chart(jd,place,varga_factor_1=1,chart_method_1=1,varga_factor_2=1,chart_method_2=1,
+                                dhasa_progression_correction=0.0):
     mixed_dvf = varga_factor_1*varga_factor_2
     birth_long = (utils.udhayadhi_nazhikai(jd, place)[1]*4)%12 #vighati/15=ghati*60/15 )
     """Note: V3.6.3 Pranapada requires sun longitude at birthtime not sunrise"""
     #srise = sunrise(jd, place)
     from jhora.horoscope.chart import charts
-    pp = charts.mixed_chart(jd, place, varga_factor_1, chart_method_1, varga_factor_2, chart_method_2)
+    pp = charts.mixed_chart(jd, place, varga_factor_1, chart_method_1, varga_factor_2, chart_method_2,
+                            dhasa_progression_correction=dhasa_progression_correction)
     sun_long = pp[1][1][0]*30+pp[1][1][1]
     pl1 = birth_long*30 + sun_long
     sl = dasavarga_from_long(sun_long, mixed_dvf)
@@ -1889,7 +1984,8 @@ def pranapada_lagna_mixed_chart(jd,place,varga_factor_1=1,chart_method_1=1,varga
     da = dasavarga_from_long(spl_long, mixed_dvf)
     return da
 def pranapada_lagna(jd,place,divisional_chart_factor=1,chart_method=1,
-                                            base_rasi=None,count_from_end_of_sign=None):
+                                            base_rasi=None,count_from_end_of_sign=None,
+                                            dhasa_progression_correction=0.0):
     """
         Get constellation and longitude of pranapada lagna
         @param jd: Julian day number
@@ -1907,7 +2003,8 @@ def pranapada_lagna(jd,place,divisional_chart_factor=1,chart_method=1,
     from jhora.horoscope.chart import charts
     pp = charts.divisional_chart(jd, place,divisional_chart_factor=divisional_chart_factor,
                         chart_method=chart_method,base_rasi=base_rasi,
-                        count_from_end_of_sign=count_from_end_of_sign)[:const._pp_count_upto_ketu]
+                        count_from_end_of_sign=count_from_end_of_sign,
+                        dhasa_progression_correction=dhasa_progression_correction)[:const._pp_count_upto_ketu]
     sun_long = pp[1][1][0]*30+pp[1][1][1]
     pl1 = birth_long*30 + sun_long
     sl = dasavarga_from_long(sun_long, divisional_chart_factor)
@@ -1921,10 +2018,12 @@ def pranapada_lagna(jd,place,divisional_chart_factor=1,chart_method=1,
     spl_long = pl1 % 360
     da = dasavarga_from_long(spl_long, divisional_chart_factor)
     return da
-def indu_lagna_mixed_chart(jd,place,varga_factor_1=1,chart_method_1=1,varga_factor_2=1,chart_method_2=1):
+def indu_lagna_mixed_chart(jd,place,varga_factor_1=1,chart_method_1=1,varga_factor_2=1,chart_method_2=1,
+                           dhasa_progression_correction=0.0):
     il_factors = [30,16,6,8,10,12,1] # Sun to Saturn. Rahu/Ketu exempted
     from jhora.horoscope.chart import charts
-    planet_positions = charts.mixed_chart(jd, place, varga_factor_1, chart_method_1, varga_factor_2, chart_method_2)
+    planet_positions = charts.mixed_chart(jd, place, varga_factor_1, chart_method_1, varga_factor_2, chart_method_2,
+                                          dhasa_progression_correction=dhasa_progression_correction)
     moon_house = planet_positions[2][1][0]
     asc_house = planet_positions[0][1][0]
     ninth_lord = const._house_owners_list[(asc_house+8)%12]
@@ -1934,7 +2033,8 @@ def indu_lagna_mixed_chart(jd,place,varga_factor_1=1,chart_method_1=1,varga_fact
     _indu_rasi = (moon_house+il1-1)%12
     return _indu_rasi,planet_positions[2][1][1]
 def indu_lagna(jd,place,divisional_chart_factor=1,chart_method=1,
-                                            base_rasi=None,count_from_end_of_sign=None):  # BV Raman Method
+                                            base_rasi=None,count_from_end_of_sign=None,
+                                            dhasa_progression_correction=0.0):  # BV Raman Method
     """
         Get constellation and longitude of indu lagna
         @param jd: Julian day number
@@ -1950,7 +2050,8 @@ def indu_lagna(jd,place,divisional_chart_factor=1,chart_method=1,
     from jhora.horoscope.chart import charts
     planet_positions = charts.divisional_chart(jd, place,divisional_chart_factor=divisional_chart_factor,
                         chart_method=chart_method,base_rasi=base_rasi,
-                        count_from_end_of_sign=count_from_end_of_sign)[:const._pp_count_upto_ketu]
+                        count_from_end_of_sign=count_from_end_of_sign,
+                        dhasa_progression_correction=dhasa_progression_correction)[:const._pp_count_upto_ketu]
     moon_house = planet_positions[2][1][0]
     asc_house = planet_positions[0][1][0]
     ninth_lord = const._house_owners_list[(asc_house+const.HOUSE_9)%12]
@@ -1959,15 +2060,18 @@ def indu_lagna(jd,place,divisional_chart_factor=1,chart_method=1,
     if il1==0: il1 = 12
     _indu_rasi = (moon_house+il1-1)%12
     return _indu_rasi,planet_positions[2][1][1]
-def kunda_lagna_mixed_chart(jd,place,varga_factor_1=1,chart_method_1=1,varga_factor_2=1,chart_method_2=1):
+def kunda_lagna_mixed_chart(jd,place,varga_factor_1=1,chart_method_1=1,varga_factor_2=1,chart_method_2=1,
+                            dhasa_progression_correction=0.0):
     mixed_dvf = varga_factor_1*varga_factor_2
     from jhora.horoscope.chart import charts
-    planet_positions = charts.mixed_chart(jd, place, varga_factor_1, chart_method_1, varga_factor_2, chart_method_2)
+    planet_positions = charts.mixed_chart(jd, place, varga_factor_1, chart_method_1, varga_factor_2, chart_method_2,
+                                          dhasa_progression_correction=dhasa_progression_correction)
     asc = planet_positions[0]; al = asc[1][0]*30+asc[1][1]; al1 = (al*81)%360
     spl = dasavarga_from_long(al1,divisional_chart_factor=mixed_dvf)
     return spl
 def kunda_lagna(jd,place,divisional_chart_factor=1,chart_method=1,
-                                            base_rasi=None,count_from_end_of_sign=None):
+                                            base_rasi=None,count_from_end_of_sign=None,
+                                            dhasa_progression_correction=0.0):
     """
         Get constellation and longitude of kunda lagna
         @param jd: Julian day number
@@ -1982,22 +2086,24 @@ def kunda_lagna(jd,place,divisional_chart_factor=1,chart_method=1,
     from jhora.horoscope.chart import charts
     planet_positions = charts.divisional_chart(jd, place,divisional_chart_factor=divisional_chart_factor,
                         chart_method=chart_method,base_rasi=base_rasi,
-                        count_from_end_of_sign=count_from_end_of_sign)[:const._pp_count_upto_ketu]
+                        count_from_end_of_sign=count_from_end_of_sign,
+                        dhasa_progression_correction=dhasa_progression_correction)[:const._pp_count_upto_ketu]
     asc = planet_positions[0]; al = asc[1][0]*30+asc[1][1]; al1 = (al*81)%360
     spl = dasavarga_from_long(al1,divisional_chart_factor=divisional_chart_factor)
     return spl
 def bhrigu_bindhu_lagna_mixed_chart(jd,place,varga_factor_1=1,chart_method_1=1,varga_factor_2=1,chart_method_2=1,
-                                  lagna_rate_factor=1.0):
-    mixed_dvf = varga_factor_1*varga_factor_2
+                                  dhasa_progression_correction=0.0):
     from jhora.horoscope.chart import charts
-    planet_positions = charts.mixed_chart(jd, place, varga_factor_1, chart_method_1, varga_factor_2, chart_method_2)
+    planet_positions = charts.mixed_chart(jd, place, varga_factor_1, chart_method_1, varga_factor_2, chart_method_2,
+                                          dhasa_progression_correction=dhasa_progression_correction)
     moon_house = planet_positions[2][1][0];rahu_house = planet_positions[8][1][0]
     moon_long = moon_house*30+planet_positions[2][1][1]; rahu_long = rahu_house*30+planet_positions[8][1][1]
     moon_add = 0 if moon_long > rahu_long else 360
     bb = (0.5*(rahu_long+moon_long+moon_add))%360
     return dasavarga_from_long(bb)
 def bhrigu_bindhu_lagna(jd,place,divisional_chart_factor=1,chart_method=1,
-                                            base_rasi=None,count_from_end_of_sign=None):
+                                            base_rasi=None,count_from_end_of_sign=None,
+                                            dhasa_progression_correction=0.0):
     """
         Get constellation and longitude of bhrigu bindhu lagna
         @param jd: Julian day number
@@ -2012,22 +2118,25 @@ def bhrigu_bindhu_lagna(jd,place,divisional_chart_factor=1,chart_method=1,
     from jhora.horoscope.chart import charts
     planet_positions = charts.divisional_chart(jd, place,divisional_chart_factor=divisional_chart_factor,
                         chart_method=chart_method,base_rasi=base_rasi,
-                        count_from_end_of_sign=count_from_end_of_sign)[:const._pp_count_upto_ketu]
+                        count_from_end_of_sign=count_from_end_of_sign,
+                        dhasa_progression_correction=dhasa_progression_correction)[:const._pp_count_upto_ketu]
     moon_house = planet_positions[2][1][0];rahu_house = planet_positions[8][1][0]
     moon_long = moon_house*30+planet_positions[2][1][1]; rahu_long = rahu_house*30+planet_positions[8][1][1]
     moon_add = 0 if moon_long > rahu_long else 360
     bb = (0.5*(rahu_long+moon_long+moon_add))%360
     return dasavarga_from_long(bb)
 def sree_lagna_mixed_chart(jd,place,varga_factor_1=1,chart_method_1=1,varga_factor_2=1,chart_method_2=1,
-                                  lagna_rate_factor=1.0):
+                                  dhasa_progression_correction=0.0):
     mixed_dvf = varga_factor_1*varga_factor_2
     from jhora.horoscope.chart import charts
-    planet_positions = charts.mixed_chart(jd, place, varga_factor_1, chart_method_1, varga_factor_2, chart_method_2)
+    planet_positions = charts.mixed_chart(jd, place, varga_factor_1, chart_method_1, varga_factor_2, chart_method_2,
+                                          dhasa_progression_correction=dhasa_progression_correction)
     asc_long = planet_positions[0][1][0]*30+planet_positions[0][1][1]
     moon_long = planet_positions[2][1][0]*30+planet_positions[2][1][1]
     sl = sree_lagna_from_moon_asc_longitudes(moon_long, asc_long, divisional_chart_factor=mixed_dvf)
     return sl
-def sree_lagna(jd,place,divisional_chart_factor=1,chart_method=1,base_rasi=None,count_from_end_of_sign=None):
+def sree_lagna(jd,place,divisional_chart_factor=1,chart_method=1,base_rasi=None,count_from_end_of_sign=None,
+               dhasa_progression_correction=0.0):
     """
         Get constellation and longitude of Sree Lagna
         @param jd: Julian day number
@@ -2042,7 +2151,8 @@ def sree_lagna(jd,place,divisional_chart_factor=1,chart_method=1,base_rasi=None,
     from jhora.horoscope.chart import charts
     planet_positions = charts.divisional_chart(jd,place,divisional_chart_factor=divisional_chart_factor,
                         chart_method=chart_method,base_rasi=base_rasi,
-                        count_from_end_of_sign=count_from_end_of_sign)[:const._pp_count_upto_ketu]
+                        count_from_end_of_sign=count_from_end_of_sign,
+                        dhasa_progression_correction=dhasa_progression_correction)[:const._pp_count_upto_ketu]
     asc_long = planet_positions[0][1][0]*30+planet_positions[0][1][1]
     moon_long = planet_positions[2][1][0]*30+planet_positions[2][1][1]
     sl = sree_lagna_from_moon_asc_longitudes(moon_long, asc_long, divisional_chart_factor=divisional_chart_factor)
@@ -2302,7 +2412,74 @@ def __next_solar_jd(jd,place,sun_long):
     solar_hour1 = (sank_sunrise + solar_hour - sank_jd_utc)*24+place.timezone
     next_solar_jd = swe.julday(sank_date[0],sank_date[1],sank_date[2],solar_hour1)
     return next_solar_jd    
-def next_solar_date(jd_at_dob,place,years=1,months=1,sixty_hours=1):
+def next_solar_date(
+    jd_at_dob,
+    place,
+    years=1,
+    months=1,
+    sixty_hours=1,
+    sookshma=1,
+    prana=1,
+    dehantar=1,
+    use_sidereal=False,
+):
+    """
+    Returns the next date at which the Sun's longitude equals its longitude at jd_at_dob,
+    shifted by Varsha/Tajaka subdivisions (years → months → sixty_hours → sookshma → prana → dehantar).
+
+    Parameters
+    ----------
+    jd_at_dob : float
+        Julian Day at time of birth.
+    place : tuple
+        Place Struct ('place', latitude, longitude, timezone) used by downstream functions.
+    years : int, default 1
+        Varsha index (1 = birth year).
+    months : int, default 1
+        Antar index within the year (1..12).
+    sixty_hours : int, default 1
+        Pratyantar index within the month (1..12); each step ≈ 2.5° ≈ ~60h.
+    sookshma : int, default 1
+        Sookshma index within the pratyantar (1..12).
+    prana : int, default 1
+        Prana index within the sookshma (1..12).
+    dehantar : int, default 1
+        Dehantar index within the prana (1..12).
+    use_sidereal : bool, default False
+        If True, use const.sidereal_year; else const.tropical_year.
+
+    Returns
+    -------
+    float
+        Julian Day for the matching solar date.
+    """
+    # Fast-path: if everything is the first sub-period, return DOB JD.
+    if (years == 1 and months == 1 and sixty_hours == 1
+        and sookshma == 1 and prana == 1 and dehantar == 1):
+        return jd_at_dob
+    # Ordered 12-fold denominators for each level (year:1, month:12, …)
+    denominators = [
+        ("years",        1,        years),
+        ("months",       12,       months),
+        ("sixty_hours",  12**2,    sixty_hours),
+        ("sookshma",     12**3,    sookshma),
+        ("prana",        12**4,    prana),
+        ("dehantar",     12**5,    dehantar),
+    ]
+    # Compute cumulative fraction of the year from birth
+    frac_of_year = 0.0
+    for _, denom, idx in denominators:
+        # Each index is 1-based; index==1 means "no additional offset" at that level.
+        frac_of_year += (int(idx) - 1) / float(denom)
+    # Sun's natal longitude (absolute in degrees 0..360)
+    sun_long_at_dob = dhasavarga(jd_at_dob, place, divisional_chart_factor=1)[0][1]
+    sun_long_at_dob = sun_long_at_dob[0] * 30.0 + sun_long_at_dob[1]
+    # Target longitude and time guess
+    sun_long_next = (sun_long_at_dob + 360.0 * frac_of_year) % 360.0
+    year_len = const.sidereal_year if use_sidereal else const.tropical_year
+    jd_next_guess = jd_at_dob + year_len * frac_of_year
+    return __next_solar_jd(jd_next_guess, place, sun_long_next)
+def _next_solar_date(jd_at_dob,place,years=1,months=1,sixty_hours=1):
     """
         returns the next date at which sun's longitue is same as at jd_at_dob (at birth say)
         For example if someone was born on 1970,2,10 and years = 10, 
@@ -2321,7 +2498,7 @@ def next_solar_date(jd_at_dob,place,years=1,months=1,sixty_hours=1):
     (y,m,d,fh) = swe.revjul(jd_at_dob)
     #print((int(sun_long_at_dob/30),utils.to_dms(sun_long_at_dob%30,is_lat_long='plong')),(y,m,d,utils.to_dms(fh)))
     sun_long_extra = ((years-1)*360+(months-1)*30+(sixty_hours-1)*2.5)%360
-    jd_extra = int(((years-1)+(months-1)/12+(sixty_hours-1)/144)*const.tropical_year) #const.sidereal_year)
+    jd_extra = (((years-1)+(months-1)/12+(sixty_hours-1)/144)*const.tropical_year) #const.sidereal_year)
     #print('jd_extra',jd_extra)
     jd_next = jd_at_dob+jd_extra
     #print('jd_next',jd_next,swe.revjul(jd_next))
@@ -2689,7 +2866,7 @@ def next_ascendant_entry_date(jd,place,direction=1,precision=0.01,raasi=None,div
         multiple = (((sl*divisional_chart_factor//30)+1)%12)*30
         if direction==-1: multiple = (sl*divisional_chart_factor//30)%12*30
     else: 
-        multiple = (raasi-1)*30
+        multiple = (raasi-1)*30 if raasi>0 else 0
     if _DEBUG_: print(utils.jd_to_gregorian(jd),'sla',sla,'multiple',multiple,'precision',precision)
     while True:
         if sl < (multiple+precision) and sl>(multiple-precision):
@@ -2743,7 +2920,7 @@ def next_planet_entry_date(planet,jd,place,direction=1,increment_days=0.01,preci
             if direction==-1:
                 multiple = ((sl//30+1)%12*30)%360
     else: 
-        multiple = (raasi-1)*30
+        multiple = (raasi-1)*30 if raasi>0 else 0
     while True:
         if sl < (multiple+precision) and sl>(multiple-precision):
             break
@@ -2909,11 +3086,11 @@ def varjyam(jd,place):
         return ag_start,ag_end
 def anandhaadhi_yoga(jd,place):
     nak = nakshatra(jd,place)
-    day = vaara(jd)
+    day = vaara(jd,place)
     return const.anandhaadhi_yoga_day_star_list[day].index(nak[0]-1),nak[2]
 def triguna(jd,place):
     _,_,_,fh = utils.jd_to_gregorian(jd)
-    day = vaara(jd)
+    day = vaara(jd,place)
     return utils.triguna_of_the_day_time(day,fh)
 def vivaha_chakra_palan(jd,place):
     """
@@ -2961,7 +3138,7 @@ def tamil_yogam(jd, place,check_special_yogas=True,use_sringeri_panchanga_versio
     panchang = const.tamil_basic_yoga_sringeri_panchanga_list if use_sringeri_panchanga_version else const.tamil_basic_yoga_list 
     nak = nakshatra(jd, place)
     naks = nak[0]-1
-    wday = vaara(jd)
+    wday = vaara(jd,place)
     #print(utils.DAYS_LIST[wday],utils.NAKSHATRA_LIST[naks],nak)
     yi = panchang[wday][naks]
     if not check_special_yogas: return yi,nak[2],nak[3]
@@ -3088,7 +3265,7 @@ def panchaka_rahitha(jd,place):
     for asc,asc_beg,asc_end in ulm:
         _tithi = tithi(jd, place)[0]+1
         _nak = nakshatra(jd, place)[0]
-        _day = vaara(jd)+1
+        _day = vaara(jd,place)+1
         _asc_rasi = asc+1
         rem = (_tithi+_nak+_day+_asc_rasi)%9
         if rem in bad_panchakas:
@@ -3211,7 +3388,7 @@ def agni_vaasa(jd,place):
             3:PaathaaLa (Nadir) - destroy wealth
     """
     tit = tithi(jd,place); tithi_index = tit[0]; t_end = tit[2]
-    day = vaara(jd)+1
+    day = vaara(jd,place)+1
     _av_list = [1,2,3,1]
     return _av_list[(tithi_index+1+day)%4], t_end
 def pushkara_yoga(jd, place):
@@ -3227,7 +3404,7 @@ def pushkara_yoga(jd, place):
     _tithi_list = [2, 17, 7, 22, 12, 27]; _day_list = [1,3,7]
     _dwi_star_list = [5, 14, 23]; _tri_star_list = [16, 7, 3, 11, 21, 25]
     tit = tithi(jd, place); _t_no = tit[0]; _t_start = tit[1]; _t_end = tit[2]
-    day = vaara(jd)+1
+    day = vaara(jd,place)+1
     nk = nakshatra(jd, place);nak = nk[0]; _n_start = nk[2]; _n_end = nk[3]
     srise1 = sunrise(jd,place)[0]; srise2 = sunrise(jd+1,place)
     ptimes = ()
@@ -3259,8 +3436,8 @@ def vidaal_yoga(jd,place):
     knt = utils.cyclic_count_of_stars_with_abhijit_in_22(const.abhijit_order_of_stars, sun_star-1,moon_star-1)
     #print(moon_star,sun_star,knt,'in',[3,6,10,13,17,20,24,27])
     return (srise,star_end) if knt in [3,6,10,13,17,20,24,27] else ()
-def disha_shool(jd):
-    return const.disha_shool_map[vaara(jd)]
+def disha_shool(jd,place):
+    return const.disha_shool_map[vaara(jd,place)]
 def yogini_vaasa(jd,place):
     tithi_index = tithi(jd,place)[0]
     return const.yogini_vaasa_tithi_map[tithi_index-1]
@@ -3367,14 +3544,14 @@ def next_lunar_year(jd,place,lunar_month_type=0,direction=1):
         lmy,lmm,lmd,lmh = utils.jd_to_gregorian(next_solar_year(jd, place)[0]); 
         return Date(lmy,lmm,lmd),lmh
     for _ in range(13):
-        (lmy,lmm,lmd),lmh = next_lunar_month(jd, place, lunar_month_type) if direction==1 else previous_lunar_month(jd, place, lunar_month_type)
+        lmy,lmm,lmd,lmh = next_lunar_month(jd, place, lunar_month_type) if direction==1 else previous_lunar_month(jd, place, lunar_month_type)
         #tithi_ = tithi(jd,place)[0]
         #lmy,lmm,lmd,lmh = utils.jd_to_gregorian(new_moon(jd,tithi_,opt=direction)) if lunar_month_type==0 else utils.jd_to_gregorian(full_moon(jd,tithi_,opt=direction))
         if _DEBUG_: print(lunar_month_type,(lmy,lmm,lmd),lmh)
         jd = utils.julian_day_number(Date(lmy,lmm,lmd), (lmh,0,0))
         lm = lunar_month_date(jd, place, use_purnimanta_system=lunar_month_type)
         if _DEBUG_: print('lunar month date',lm)
-        _lunar_month_number=((lm[0]+1)%12 if lm[-1]==30 else lm[0])
+        _lunar_month_number=((lm[0]+1)%12 if lm[1]==30 else lm[0]) ##<<< TODO: Something wrong lm[-1] is not lunar day
         _lunar_month_start = 1
         if _lunar_month_number==_lunar_month_start:
             _tithi = tithi(jd,place)
@@ -3403,23 +3580,6 @@ def previous_lunar_year(jd,place,lunar_month_type=0):
         lmy,lmm,lmd,lmh = utils.jd_to_gregorian(previous_solar_year(jd, place)[0]); 
         return Date(lmy,lmm,lmd),lmh
     return next_lunar_year(jd, place, lunar_month_type, direction=-1)
-    for _ in range(13):
-        (lmy,lmm,lmd),lmh = previous_lunar_month(jd, place, lunar_month_type)
-        if _DEBUG_: print((lmy,lmm,lmd),lmh)
-        jd = utils.julian_day_number(Date(lmy,lmm,lmd), (lmh,0,0))
-        lm = lunar_month_date(jd, place, use_purnimanta_system=lunar_month_type)
-        if _DEBUG_: print(lm)
-        #if direction==1:
-        _lunar_month_number=(lm[0]+1)%12 if lm[-1]==30 else lm[0]
-        _lunar_month_start = 1
-        if _lunar_month_number==_lunar_month_start:
-            if _DEBUG_: print('found lunar year date')
-            jd = utils.julian_day_number(Date(lmy,lmm,lmd), (lmh,0,0))
-            lm = lunar_month_date(jd, place, use_purnimanta_system=lunar_month_type)
-            if _DEBUG_: print(lm)
-            return Date(lmy,lmm,lmd),lmh
-        jd -= 14
-    if _DEBUG_: print('next/prev lunar_year could not be found')
 special_tithis = lambda jd,place: [[tithi(jd, place, tithi_index=t,cycle=c) for t in range(1,13)] for c in range(1,4)]
 def is_night_birth(jd, place):
     """
@@ -3571,35 +3731,63 @@ def _get_next_raasi(pl,sl,direction=1):
             _next_raasi = int((sl//30+1)%12)
     print(planet,sl,_next_raasi)
     return _next_raasi
+def true_tropical_year(jd,place,round_to_digits=6):
+    jd_utc = jd-place.timezone/24.0
+    veq1 = swe.solcross_ut(0.0,jd_utc)
+    veq2 = swe.solcross_ut(0.0,veq1+300)
+    return round(veq2-veq1,round_to_digits)
+def true_sidereal_year(jd,place,round_to_digits=6):
+    jd_sid1,_ = previous_planet_entry_date(const.SUN_ID, jd, place, raasi=1)
+    jd_sid2,_ = next_planet_entry_date(const.SUN_ID, jd, place, raasi=1)
+    return round(jd_sid2-jd_sid1,round_to_digits)
+def tithi_year(jd,place,round_to_digits=6):
+    ps_date,psh = previous_lunar_year(jd, place, lunar_month_type=0)
+    jd_prev = utils.julian_day_number(ps_date,(psh,0,0))
+    ps_date,psh = next_lunar_year(jd, place, lunar_month_type=0)
+    jd_next = utils.julian_day_number(ps_date,(psh,0,0))
+    return round(jd_next-jd_prev,round_to_digits)
+def lunar_year(jd,place,round_to_digits=6):
+    return tithi_year(jd, place, round_to_digits)
+def savana_year(jd,place,round_to_digits=6,savana_method=0):
+    """ 
+        Returns savana year 360 sunrise days
+        savana_method = -1 (jd-360 to jd)
+        savana_method = 0 (jd-180 to jd+180)
+        savana_method = 1 (jd to jd+360)
+    """
+    jd1 = jd if savana_method==1 else (jd-180 if savana_method==0 else jd-360)
+    jd2 = jd+360 if savana_method==1 else (jd+180 if savana_method==0 else jd) 
+    jd1_rise = sunrise(jd1,place)[-1]
+    jd2_rise = sunrise(jd2,place)[-1]
+    return round(jd2_rise-jd1_rise,round_to_digits)
 if __name__ == "__main__":
     import time
-    utils.set_language('ta')
+    utils.set_language('en')
     const.use_24hour_format_in_to_dms=False
     _ayanamsa = "TRUE_PUSHYA"#"LAHIRI"#
     set_planet_list(True)
-    set_ayanamsa_mode(_ayanamsa)
-    #const.use_24hour_format_in_to_dms= False
-    dob = Date(1996,12,7); tob = (10,34,0); place = Place('Chennai,India',13.03862,80.261818,5.5)
-    jd = utils.julian_day_number(dob,tob);jd_utc = jd - place.timezone/24.0
-    print(sunrise(jd,place),sunset(jd,place))
-    asc = ascendant(jd, place)
-    print(utils.deg_to_sign_str(asc[0]*30+asc[1]))
-    for p in range(9):
-        p_swe = ephemeris_planet_index(p)
-        print(p,utils.deg_to_sign_str(sidereal_longitude(jd_utc, p_swe)))
-    planet = const.VENUS_ID; direction = 1; raasi = None; dir_str = "Before" if direction==-1 else "After"
-    ret,ned,_ = next_solar_eclipse(jd,place)
-    if ret != -1 : print([utils.jd_to_gregorian(_jd) for _jd in ned])
+    dcf = 1; dob = Date(1996,12,7); tob = (10,34,0); place = Place('Chennai,India',13.0878,80.2785,5.5)
+    jd = utils.julian_day_number(dob, tob)
+    print(_calculate_ayanamsa_senthil_from_jd(jd))
+    set_ayanamsa_mode("SIDM_USER",ayanamsa_value=13.0,jd=jd)
+    print(get_ayanamsa_value(jd))
     exit()
-    p_swe = ephemeris_planet_index(planet)
-    increment_speed_factor = 0.001
-    pstr1 = utils.resource_strings['ascendant_str'] if planet=='L' else utils.PLANET_NAMES[planet]
-    start_time = time.time()
-    p_speed = daily_planet_speed(jd,place,planet)
-    p_long = sidereal_longitude(jd_utc, p_swe); p_raasi = int(p_long//30)
-    for _ in range(12):
-        nrt = next_planet_retrograde_change_date(planet, dob, place, direction=1,increment_days=0.1)
-        p_long = sidereal_longitude(nrt[0], p_swe)
-        print(utils.deg_to_sign_str(p_long),utils.jd_to_gregorian(nrt[0]),'+ve'if nrt[1]==1 else '-ve')
-        y,m,d,fh = utils.jd_to_gregorian(nrt[0]); dob=Date(y,m,d+1); tob=(fh,0,0)
+    current_date_str,current_time_str = datetime.now().strftime('%Y,%m,%d;%H:%M:%S').split(';')
+    y,m,d = current_date_str.split(",")
+    hh,mm,ss = current_time_str.split(":")
+    dob = Date(int(y),int(m),int(d)); tob = (int(hh),int(mm),int(ss)); place = Place('Inverness,IL,USA',42.113275,-88.098433,-5.0)
+    print('current date time',dob,tob)
+    jd = utils.julian_day_number(dob,tob)
+    print(utils.resource_strings['civil_weekday_str'],utils.DAYS_LIST[vaara(jd,place,show_vedic_day=False)])
+    sunrise_hours = sunrise(jd, place)[0]
+    print('sunrise hours',utils.to_dms(sunrise_hours))
+    tob = (sunrise_hours-(1/3600),0,0)
+    jd = utils.julian_day_number(dob,tob)
+    print(dob,utils.to_dms(tob[0]),'before sunrise',utils.resource_strings['vedic_weekday_str'],utils.DAYS_LIST[vaara(jd,place,show_vedic_day=True)])
+    tob = (sunrise_hours,0,0)
+    jd = utils.julian_day_number(dob,tob)
+    print(dob,utils.to_dms(tob[0]),'At sunrise',utils.resource_strings['vedic_weekday_str'],utils.DAYS_LIST[vaara(jd,place,show_vedic_day=True)])
+    tob = (sunrise_hours+(1/3600),0,0)
+    jd = utils.julian_day_number(dob,tob)
+    print(dob,utils.to_dms(tob[0]),'after sunrise',utils.resource_strings['vedic_weekday_str'],utils.DAYS_LIST[vaara(jd,place,show_vedic_day=True)])
     exit()

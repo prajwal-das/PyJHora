@@ -21,7 +21,7 @@
 import swisseph as swe
 import json
 from jhora import const,utils
-from jhora.horoscope import main
+from jhora.horoscope import info
 from jhora.panchanga import drik
 from jhora.horoscope.chart import house, charts
 from jhora.horoscope.transit import tajaka

@@ -55,6 +55,7 @@ class Horoscope():
         self.pravesha_type = pravesha_type
         self._22nd_drekkana = {}
         self._64th_navamsa = {}
+        self.get_dhasa_bhukthi_as_raw_data = False
         if self.place_name is None:
             if self.latitude is None or self.longitude is None or self.timezone_offset is None:
                 print('Please provide either place_with_country_code or combination of latitude and longitude ...\n Aborting script')
@@ -130,7 +131,7 @@ class Horoscope():
             cal_key_list['timezone_offset_str'] : "{0:.2f}".format(self.timezone_offset),
             cal_key_list['report_date_str'] : "{0:d}-{1:d}-{2:d}".format(self.Date.year,self.Date.month,self.Date.day)#self.Date.isoformat(),         
         }
-        vaaram = drik.vaara(jd)
+        vaaram = drik.vaara(jd,place)
         calendar_info[cal_key_list['vaaram_str']]=utils.DAYS_LIST[vaaram]
         calendar_info[cal_key_list['calculation_type_str']]=cal_key_list['drik_panchang_str']
         if self.calculation_type.lower()=='ss':
@@ -259,7 +260,8 @@ class Horoscope():
             h += 1
         return _bhava_chart,_bhava_chart_info,_bhava_ascendant_house
     def get_horoscope_information_for_chart(self,chart_index=0,chart_method=1,divisional_chart_factor=None,
-                                            base_rasi=None,count_from_end_of_sign=None,varnada_method=1):
+                                            base_rasi=None,count_from_end_of_sign=None,varnada_method=1,
+                                            dhasa_progression_correction=0.0):
         horoscope_info = {}
         self._vimsottari_balance = ();self._yoga_vimsottari_balance = ()
         self._arudha_lagna_data_kundali = {}
@@ -314,7 +316,8 @@ class Horoscope():
                                             divisional_chart_factor=dhasavarga_factor,chart_method=chart_method,
                                             years=self.years,months=self.months,sixty_hours=self.sixty_hours,
                                             calculation_type='drik',pravesha_type=self.pravesha_type,
-                                            base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign)
+                                            base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign,
+                                            dhasa_progression_correction=dhasa_progression_correction)
         ascendant_navamsa = planet_positions[0][1]
         asc_house = ascendant_navamsa[0]
         #if dhasavarga_factor==9:
@@ -324,11 +327,13 @@ class Horoscope():
         horoscope_ascendant_house = asc_house
         jd = self.julian_day #V3.1.9
         horoscope_charts[asc_house] += cal_key_list['ascendant_str'] +"\n"
-        self._get_sphuta(dob, tob, place, divisional_chart_factor=dhasavarga_factor)
+        self._get_sphuta(dob, tob, place, divisional_chart_factor=dhasavarga_factor,
+                         dhasa_progression_correction=dhasa_progression_correction)
         abl = self._get_arudha_padhas(dob, tob, place, divisional_chart_factor=dhasavarga_factor,
                                 chart_method=chart_method,years=self.years,months=self.months,
                                 sixty_hours=self.sixty_hours,pravesha_type=self.pravesha_type,
-                                base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign)
+                                base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign,
+                                dhasa_progression_correction=dhasa_progression_correction)
         #self._arudha_lagna_data_kundali = self._arudha_lagna_data[dhasavarga_factor].copy()
         for bli,_ in const._arudha_lagnas_included_in_chart.items():
             key = list(abl)[bli-1]
@@ -339,66 +344,77 @@ class Horoscope():
         key = key_dhasa_factor +'-'+cal_key_list['bhava_lagna_str']+' ('+cal_key_list['bhava_lagna_short_str']+')'
         value = drik.bhava_lagna(jd,place,divisional_chart_factor=dhasavarga_factor,
                                  chart_method=chart_method,base_rasi=base_rasi,
-                                 count_from_end_of_sign=count_from_end_of_sign)
+                                 count_from_end_of_sign=count_from_end_of_sign,
+                                 dhasa_progression_correction=dhasa_progression_correction)
         self._bhava_lagna_data_kundali[dhasavarga_factor] = value[0] # V3.1.9
         horoscope_info[key] = utils.RAASI_LIST[value[0]] +' ' + utils.to_dms(value[1],is_lat_long='plong')
         key = key_dhasa_factor +'-'+cal_key_list['hora_lagna_str']+' ('+cal_key_list['hora_lagna_short_str']+')'
         value = drik.hora_lagna(jd,place,divisional_chart_factor=dhasavarga_factor,
                                  chart_method=chart_method,base_rasi=base_rasi,
-                                 count_from_end_of_sign=count_from_end_of_sign)
+                                 count_from_end_of_sign=count_from_end_of_sign,
+                                 dhasa_progression_correction=dhasa_progression_correction)
         self._hora_lagna_data_kundali[dhasavarga_factor] = value[0]
         horoscope_info[key] = utils.RAASI_LIST[value[0]] +' ' + utils.to_dms(value[1],is_lat_long='plong')
         key = key_dhasa_factor +'-'+cal_key_list['ghati_lagna_str']+' ('+cal_key_list['ghati_lagna_short_str']+')'
         value = drik.ghati_lagna(jd,place,divisional_chart_factor=dhasavarga_factor,
                                  chart_method=chart_method,base_rasi=base_rasi,
-                                 count_from_end_of_sign=count_from_end_of_sign)
+                                 count_from_end_of_sign=count_from_end_of_sign,
+                                 dhasa_progression_correction=dhasa_progression_correction)
         self._ghati_lagna_data_kundali[dhasavarga_factor] = value[0]
         horoscope_info[key] = utils.RAASI_LIST[value[0]] +' ' + utils.to_dms(value[1],is_lat_long='plong')
         key = key_dhasa_factor +'-'+cal_key_list['vighati_lagna_str']+' ('+cal_key_list['vighati_lagna_short_str']+')'
         value = drik.vighati_lagna(jd,place,divisional_chart_factor=dhasavarga_factor,
                                  chart_method=chart_method,base_rasi=base_rasi,
-                                 count_from_end_of_sign=count_from_end_of_sign)
+                                 count_from_end_of_sign=count_from_end_of_sign,
+                                 dhasa_progression_correction=dhasa_progression_correction)
         self._vighati_lagna_data_kundali[dhasavarga_factor] = value[0]
         horoscope_info[key] = utils.RAASI_LIST[value[0]] +' ' + utils.to_dms(value[1],is_lat_long='plong')
         key = key_dhasa_factor+'-'+cal_key_list['pranapada_lagna_str']+' ('+cal_key_list['pranapada_lagna_short_str']+')'
         value = drik.pranapada_lagna(jd,place,divisional_chart_factor=dhasavarga_factor,
                                  chart_method=chart_method,base_rasi=base_rasi,
-                                 count_from_end_of_sign=count_from_end_of_sign)
+                                 count_from_end_of_sign=count_from_end_of_sign,
+                                 dhasa_progression_correction=dhasa_progression_correction)
         self._pranapada_lagna_data_kundali[dhasavarga_factor] = value[0]
         horoscope_info[key] = utils.RAASI_LIST[value[0]] +' ' + utils.to_dms(value[1],is_lat_long='plong')
         key = key_dhasa_factor+'-'+cal_key_list['indu_lagna_str']+' ('+cal_key_list['indu_lagna_short_str']+')'
         value = drik.indu_lagna(jd,place,divisional_chart_factor=dhasavarga_factor,
                                  chart_method=chart_method,base_rasi=base_rasi,
-                                 count_from_end_of_sign=count_from_end_of_sign)
+                                 count_from_end_of_sign=count_from_end_of_sign,
+                                 dhasa_progression_correction=dhasa_progression_correction)
         self._indu_lagna_data_kundali[dhasavarga_factor] = value[0]
         horoscope_info[key] = utils.RAASI_LIST[value[0]] +' ' + utils.to_dms(value[1],is_lat_long='plong')
         key = key_dhasa_factor+'-'+cal_key_list['bhrigu_bindhu_lagna_str']+' ('+cal_key_list['bhrigu_bindhu_lagna_short_str']+')'
         value = drik.bhrigu_bindhu_lagna(jd,place,divisional_chart_factor=dhasavarga_factor,
                                  chart_method=chart_method,base_rasi=base_rasi,
-                                 count_from_end_of_sign=count_from_end_of_sign)
+                                 count_from_end_of_sign=count_from_end_of_sign,
+                                 dhasa_progression_correction=dhasa_progression_correction)
         self._bhrigu_bindhu_lagna_data_kundali[dhasavarga_factor] = value[0]
         horoscope_info[key] = utils.RAASI_LIST[value[0]] +' ' + utils.to_dms(value[1],is_lat_long='plong')
         key = key_dhasa_factor+'-'+cal_key_list['kunda_lagna_str']+' ('+cal_key_list['kunda_lagna_short_str']+')'
         value = drik.kunda_lagna(jd,place,divisional_chart_factor=dhasavarga_factor,
                                  chart_method=chart_method,base_rasi=base_rasi,
-                                 count_from_end_of_sign=count_from_end_of_sign)
+                                 count_from_end_of_sign=count_from_end_of_sign,
+                                 dhasa_progression_correction=dhasa_progression_correction)
         self._kunda_lagna_data_kundali[dhasavarga_factor] = value[0]
         horoscope_info[key] = utils.RAASI_LIST[value[0]] +' ' + utils.to_dms(value[1],is_lat_long='plong')
         key = key_dhasa_factor +'-'+cal_key_list['sree_lagna_str']+' ('+cal_key_list['sree_lagna_short_str']+')'
         jd = self.julian_day # V3.1.9 revert to julian after special lagna calculations
         value = drik.sree_lagna(jd,place,divisional_chart_factor=dhasavarga_factor,
                                  chart_method=chart_method,base_rasi=base_rasi,
-                                 count_from_end_of_sign=count_from_end_of_sign)
+                                 count_from_end_of_sign=count_from_end_of_sign,
+                                 dhasa_progression_correction=dhasa_progression_correction)
         self._sree_lagna_data_kundali[dhasavarga_factor] = value[0] # V3.1.9
         horoscope_info[key] = utils.RAASI_LIST[value[0]] +' ' + utils.to_dms(value[1],is_lat_long='plong')
         key = key_dhasa_factor +'-'+cal_key_list['varnada_lagna_str']+' ('+cal_key_list['varnada_lagna_short_str']+')'
         value = charts.varnada_lagna(dob, tob, place,divisional_chart_factor=dhasavarga_factor,
                                  chart_method=chart_method,base_rasi=base_rasi,
-                                 count_from_end_of_sign=count_from_end_of_sign)
+                                 count_from_end_of_sign=count_from_end_of_sign,
+                                 dhasa_progression_correction=dhasa_progression_correction)
         self._varnada_lagna_data_kundali[dhasavarga_factor]=value[0]            
         horoscope_info[key] = utils.RAASI_LIST[value[0]] +' ' + utils.to_dms(value[1],is_lat_long='plong')
         key = key_dhasa_factor +'-'+cal_key_list['maandi_str']+' ('+cal_key_list['maandi_short_str']+')'
-        value = drik.maandi_longitude(dob,tob,place,divisional_chart_factor=dhasavarga_factor)
+        value = drik.maandi_longitude(dob,tob,place,divisional_chart_factor=dhasavarga_factor,
+                                      dhasa_progression_correction=0.0)
         self._maandhi_data_kundali[dhasavarga_factor]=value[0]            
         horoscope_info[key] = utils.RAASI_LIST[value[0]] +' ' + utils.to_dms(value[1],is_lat_long='plong')
         horoscope_info[key_dhasa_factor +'-'+cal_key_list['ascendant_str']] = \
@@ -407,7 +423,8 @@ class Horoscope():
         chara_karaka_names = [x+'_str' for x in house.chara_karaka_names]
         chara_karaka_dict = get_chara_karakas(jd, place, years=self.years,
                                               months=self.months, sixty_hours=self.sixty_hours,
-                                              calculation_type=self.calculation_type, pravesha_type=self.pravesha_type)
+                                              calculation_type=self.calculation_type, pravesha_type=self.pravesha_type,
+                                              dhasa_progression_correction=dhasa_progression_correction)
         retrograde_planets = drik.planets_in_retrograde(jd, place)
         for p,(h,long) in planet_positions[1:]:
             ret_str = ''
@@ -424,55 +441,72 @@ class Horoscope():
             v = utils.RAASI_LIST[h]+' ' +utils.to_dms(long,is_lat_long='plong') + ck_str
             horoscope_charts[planet_house] += planet_name +'\n'
             horoscope_info[k]= v
-        sub_planet_list_1 = {'kaala_str':'kaala_longitude','mrityu_str':'mrityu_longitude','artha_str':'artha_praharaka_longitude','yama_str':'yama_ghantaka_longitude',
+        sub_planet_list_1 = {'kaala_str':'kaala_longitude','mrityu_str':'mrityu_longitude',
+                             'artha_str':'artha_praharaka_longitude','yama_ghantaka_str':'yama_ghantaka_longitude',
                            'gulika_str':'gulika_longitude','maandi_str':'maandi_longitude'}
         sub_planet_list_2 = ['dhuma','vyatipaata','parivesha','indrachaapa','upaketu']
         #sun_long = planet_positions[1][1][0]*30+planet_positions[1][1][1]
-        for sp,sp_func in sub_planet_list_1.items():
-            k = key_dhasa_factor+'-'+cal_key_list[sp]+' ('+cal_key_list[sp.replace('_str','_short_str')]+')'
-            v = eval('drik.'+sp_func+'(dob,tob,place,divisional_chart_factor=dhasavarga_factor)')
-            horoscope_info[k] = utils.RAASI_LIST[v[0]] +' '+utils.to_dms(v[1],is_lat_long='plong') 
+        for sp, sp_func in sub_planet_list_1.items():
+            k = f"{key_dhasa_factor}-{cal_key_list[sp]} ({cal_key_list[sp.replace('_str', '_short_str')]})"
+            func = getattr(drik, sp_func, None)
+            if not callable(func):
+                raise AttributeError(f"'drik' has no callable '{sp_func}'")
+            v = func(dob, tob, place, divisional_chart_factor=dhasavarga_factor,
+                     dhasa_progression_correction=dhasa_progression_correction)
+            horoscope_info[k] = utils.RAASI_LIST[v[0]] + ' ' + utils.to_dms(v[1], is_lat_long='plong')
         for sp in sub_planet_list_2:
-            k = key_dhasa_factor+'-'+cal_key_list[sp+'_str']+' ('+cal_key_list[sp+'_short_str']+')'
-            v = eval('charts.'+'solar_upagraha_longitudes(planet_positions,sp,divisional_chart_factor=dhasavarga_factor)') # Fixed in V3.6.9
-            horoscope_info[k] = utils.RAASI_LIST[v[0]] +' '+utils.to_dms(v[1],is_lat_long='plong')
+            k = f"{key_dhasa_factor}-{cal_key_list[sp + '_str']} ({cal_key_list[sp + '_short_str']})"
+            v = charts.solar_upagraha_longitudes(
+                planet_positions,
+                sp,
+                divisional_chart_factor=dhasavarga_factor
+            )
+            horoscope_info[k] = utils.RAASI_LIST[v[0]] + " " + utils.to_dms(v[1], is_lat_long="plong")
         for h in range(12):
             vl = charts.varnada_lagna(dob, tob, place, divisional_chart_factor=dhasavarga_factor,
                                       chart_method=chart_method, house_index=h+1, varnada_method=varnada_method,
-                                      base_rasi=base_rasi, count_from_end_of_sign=count_from_end_of_sign)
+                                      base_rasi=base_rasi, count_from_end_of_sign=count_from_end_of_sign,
+                                      dhasa_progression_correction=dhasa_progression_correction)
             k = key_dhasa_factor+'-'+cal_key_list['varnada_lagna_str']+' (V'+str(h+1)+')'
             horoscope_info[k] = utils.RAASI_LIST[vl[0]] +' '+utils.to_dms(vl[1],is_lat_long='plong') 
         spl_list = ['tri','chatur','pancha','prana','deha','mrityu','sookshma_tri','beeja','kshetra','tithi','yoga',
                     'yogi','avayogi','rahu_tithi']
         for spl in spl_list:
             from jhora.horoscope.chart import sphuta
-            vl = eval('sphuta.'+spl+'_sphuta(dob,tob,place,divisional_chart_factor=dhasavarga_factor,chart_method=chart_method,base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign)')
-            k = key_dhasa_factor+'-'+cal_key_list[spl+'_sphuta_str']+' '+cal_key_list['sphuta_str']
+            func_str = '_sphuta(dob,tob,place,divisional_chart_factor=dhasavarga_factor,chart_method=chart_method'+\
+                    ',base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign,' + \
+                    'dhasa_progression_correction=dhasa_progression_correction)'
+            vl = eval('sphuta.'+spl+func_str)
+            k = (key_dhasa_factor+'-'+cal_key_list[spl+'_sphuta_str']+' '+cal_key_list['sphuta_str']+
+                 ' ('+cal_key_list[spl+'_sphuta_short_str']+') ')
             horoscope_info[k] = utils.RAASI_LIST[vl[0]] +' '+utils.to_dms(vl[1],is_lat_long='plong') 
         return horoscope_info, horoscope_charts,horoscope_ascendant_house
     def get_special_planets_for_chart(self,jd,place,divisional_chart_factor=1,chart_method=1,
-                                            base_rasi=None,count_from_end_of_sign=None):
+                                            base_rasi=None,count_from_end_of_sign=None,
+                                            dhasa_progression_correction=0.0):
         y,m,h,fh = utils.jd_to_gregorian(jd); dob = drik.Date(y,m,h); tob=(fh,0,0)
         cal_key_list = self.cal_key_list
-        sub_planet_list = {'Kl':'kaala_str','Mr':'mrityu_str','Ap':'artha_str','Yg':'yama_str',
+        sub_planet_list = {'Kl':'kaala_str','Mr':'mrityu_str','Ap':'artha_str','Yg':'yama_ghantaka_str',
                            'Gk':'gulika_str','Md':'maandi_str','Dm':'dhuma_str','Vp':'vyatipaata_str',
                            'Pv':'parivesha_str','Ic':'indrachaapa_str','Uk':'upaketu_str'}
         spl = charts.special_planet_longitudes(dob, tob, place, divisional_chart_factor=divisional_chart_factor, 
-                            chart_method=chart_method, base_rasi=base_rasi, count_from_end_of_sign=count_from_end_of_sign)
+                            chart_method=chart_method, base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign,
+                            dhasa_progression_correction=dhasa_progression_correction)
         _special_planet_chart = ['' for _ in range(12)]
         for sp,(h,_) in spl:
             _special_planet_chart[h] += cal_key_list[sub_planet_list[sp].replace('_str','_short_str')]+'\n'
         return {cal_key_list['upagraha_str']:_special_planet_chart}
     def get_special_planets_for_mixed_chart(self,jd,place,varga_factor_1=1,chart_method_1=1,varga_factor_2=1,
-                                            chart_method_2=1):
+                                            chart_method_2=1,dhasa_progression_correction=0.0):
         cal_key_list = self.cal_key_list
         y,m,d,fh = utils.jd_to_gregorian(jd); dob = drik.Date(y,m,d); tob=(fh,0,0)
-        sub_planet_list = {'Kl':'kaala_str','Mr':'mrityu_str','Ap':'artha_str','Yg':'yama_str',
+        sub_planet_list = {'Kl':'kaala_str','Mr':'mrityu_str','Ap':'artha_str','Yg':'yama_ghantaka_str',
                            'Gk':'gulika_str','Md':'maandi_str','Dm':'dhuma_str','Vp':'vyatipaata_str',
                            'Pv':'parivesha_str','Ic':'indrachaapa_str','Uk':'upaketu_str'}
         spl = charts.special_planet_longitudes_mixed_chart(dob, tob, place, varga_factor_1=varga_factor_1,
                                                 chart_method_1=chart_method_1, varga_factor_2=varga_factor_2,
-                                                chart_method_2=chart_method_2)
+                                                chart_method_2=chart_method_2,
+                                                dhasa_progression_correction=dhasa_progression_correction)
         _special_planet_chart = ['' for _ in range(12)]
         for sp,(h,_) in spl:
             _special_planet_chart[h] += cal_key_list[sub_planet_list[sp].replace('_str','_short_str')]+'\n'
@@ -605,7 +639,7 @@ class Horoscope():
             v = utils.RAASI_LIST[h]+' ' +utils.to_dms(long,is_lat_long='plong') + ck_str
             horoscope_charts[planet_house] += planet_name +'\n'
             horoscope_info[k]= v
-        sub_planet_list = {'Kl':'kaala_str','Mr':'mrityu_str','Ap':'artha_str','Yg':'yama_str',
+        sub_planet_list = {'Kl':'kaala_str','Mr':'mrityu_str','Ap':'artha_str','Yg':'yama_ghantaka_str',
                            'Gk':'gulika_str','Md':'maandi_str','Dm':'dhuma_str','Vp':'vyatipaata_str',
                            'Pv':'parivesha_str','Ic':'indrachaapa_str','Uk':'upaketu_str'}
         spl = charts.special_planet_longitudes_mixed_chart(dob, tob, place, varga_factor_1=dhasavarga_factor_1, 
@@ -773,7 +807,8 @@ class Horoscope():
         # Shadow Sub Planet information
         #k = cal_key_list['raasi_str']+'-'+cal_key_list['upagraha_str']
         #horoscope_info[k]=''
-        sub_planet_list_1 = {'kaala_str':'kaala_longitude','mrityu_str':'mrityu_longitude','artha_str':'artha_praharaka_longitude','yama_str':'yama_ghantaka_longitude',
+        sub_planet_list_1 = {'kaala_str':'kaala_longitude','mrityu_str':'mrityu_longitude','artha_str':'artha_praharaka_longitude',
+                             'yama_ghantaka_str':'yama_ghantaka_longitude',
                            'gulika_str':'gulika_longitude','maandi_str':'maandi_longitude'}
         sub_planet_list_2 = ['dhuma','vyatipaata','parivesha','indrachaapa','upaketu']
         place = drik.Place(self.place_name,self.latitude,self.longitude,self.timezone_offset)
@@ -886,23 +921,26 @@ class Horoscope():
                 horoscope_info[k] = utils.RAASI_LIST[v[0]] +' '+utils.to_dms(v[1],is_lat_long='plong')
         return horoscope_info, horoscope_charts,horoscope_ascendant_houses#, vimsottari_dhasa_bhukti_info,ashtottari_dhasa_bhukti_info,narayana_dhasa_info
     def get_varnada_lagna_for_chart(self,dob, tob, place, divisional_chart_factor=1, chart_method=None,
-                                    varnada_method=1, base_rasi=None, count_from_end_of_sign=None):
+                                    varnada_method=1, base_rasi=None, count_from_end_of_sign=None,
+                                    dhasa_progression_correction=0.0):
         _vl_chart = ['' for _ in range(12)]
         for h in range(12):
             vl = charts.varnada_lagna(dob, tob, place, divisional_chart_factor=divisional_chart_factor,
                         chart_method=chart_method,house_index=h+1,
-                        varnada_method=varnada_method,base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign)
+                        varnada_method=varnada_method,base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign,
+                        dhasa_progression_correction=dhasa_progression_correction)
             _vl_chart[vl[0]] += 'V'+str(h+1)+'\n'
         _varnada_chart_dict = {self.cal_key_list['varnada_lagna_str']:_vl_chart}
         return _varnada_chart_dict
     def get_varnada_lagna_for_mixed_chart(self,dob, tob, place,varga_factor_1=None, chart_method_1=None,
                                           varga_factor_2=None, chart_method_2=None,
-                            varnada_method=1):
+                            varnada_method=1,dhasa_progression_correction=0.0):
         _vl_chart = ['' for _ in range(12)]
         for h in range(12):
             vl = charts.varnada_lagna_mixed_chart(dob, tob, place, house_index=h+1,
                         varga_factor_1=varga_factor_1, chart_method_1=chart_method_1,
-                        varga_factor_2=varga_factor_2, chart_method_2=chart_method_2, varnada_method=varnada_method)
+                        varga_factor_2=varga_factor_2, chart_method_2=chart_method_2, varnada_method=varnada_method,
+                                                  dhasa_progression_correction=dhasa_progression_correction)
             _vl_chart[vl[0]] += 'V'+str(h+1)+'\n'
         _varnada_chart_dict = {self.cal_key_list['varnada_lagna_str']:_vl_chart}
         return _varnada_chart_dict
@@ -979,13 +1017,15 @@ class Horoscope():
         #self._sphuta_data.update(_sphuta_dict)
         return _sphuta_dict
     def _get_sphuta(self,dob,tob,place,divisional_chart_factor=1,chart_method=1,
-                                        base_rasi=None,count_from_end_of_sign=None):
+                                        base_rasi=None,count_from_end_of_sign=None,
+                                        dhasa_progression_correction=0.0):
         from jhora.horoscope.chart import sphuta
         _sphuta_dict = {}
         for s in const.sphuta_list:
             key = self.cal_key_list[s+'_sphuta_str']+' '+self.cal_key_list['sphuta_str']+' ('+self.cal_key_list[s+'_sphuta_short_str']+')'
             fn = 'sphuta.'+s+'_sphuta(dob,tob,place,divisional_chart_factor=divisional_chart_factor,chart_method=chart_method,base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign)'
-            value = eval(fn)
+            value = eval(fn); value1=value[0]*30+value[1]+dhasa_progression_correction
+            value = drik.dasavarga_from_long(value1)
             _sphuta_dict[key] = utils.RAASI_LIST[value[0]]+' '+utils.to_dms(value[1], is_lat_long='plong')
         #self._sphuta_data.update(_sphuta_dict)
         return _sphuta_dict
@@ -1029,13 +1069,15 @@ class Horoscope():
         return arudha_menu_dict
     def _get_arudha_padhas(self,dob,tob,place,divisional_chart_factor=1,chart_method=1,
                            years=1,months=1,sixty_hours=1,pravesha_type=0,
-                           base_rasi=None,count_from_end_of_sign=None):
+                           base_rasi=None,count_from_end_of_sign=None,
+                           dhasa_progression_correction=0.0):
         from jhora.horoscope.chart import arudhas
         jd_at_dob = utils.julian_day_number(dob, tob)
         planet_positions = charts.divisional_chart(jd_at_dob, place, divisional_chart_factor=divisional_chart_factor,
                                                    chart_method=chart_method,years=years,months=months,
                                                    sixty_hours=sixty_hours,pravesha_type=pravesha_type,
-                                            base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign)
+                                            base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign,
+                                            dhasa_progression_correction=dhasa_progression_correction)
         self._arudha_menu_dict = self._get_arudha_padhas_menu_dict(planet_positions)
         asc_house = planet_positions[0][1][0]
         ba = arudhas.bhava_arudhas_from_planet_positions(planet_positions)
@@ -1064,7 +1106,7 @@ class Horoscope():
         _kendraadhi_rasi_dhasa_bhukthi_info = self._get_kendraadhi_rasi_dhasa(dob,tob,place)
         _sudasa_dhasa_bhukthi_info = self._get_sudasa_dhasa(dob,tob,place)
         _drig_dhasa_bhukthi_info = self._get_drig_dhasa(dob,tob,place)
-        _nirayana_dhasa_bhukthi_info = self._get_nirayana_dhasa(dob,tob,place)
+        _niryaana_dhasa_bhukthi_info = self._get_niryaana_dhasa(dob,tob,place)
         _shoola_dhasa_bhukthi_info = self._get_shoola_dhasa(dob,tob,place)
         _kendraadhi_karaka_dhasa_bhukthi_info = self._get_kendraadhi_karaka_dhasa(dob,tob,place)
         _chara_dhasa_bhukthi_info = self._get_chara_dhasa(dob,tob,place)
@@ -1074,496 +1116,790 @@ class Horoscope():
         _sthira_dhasa_bhukthi_info = self._get_sthira_dhasa(dob, tob, place)
         _tara_lagna_dhasa_bhukthi_info = self._get_tara_lagna_dhasa(dob, tob, place)
         return [_narayana_dhasa_bhukthi_info, _kendraadhi_rasi_dhasa_bhukthi_info, _sudasa_dhasa_bhukthi_info, \
-            _drig_dhasa_bhukthi_info, _nirayana_dhasa_bhukthi_info, _shoola_dhasa_bhukthi_info, \
+            _drig_dhasa_bhukthi_info, _niryaana_dhasa_bhukthi_info, _shoola_dhasa_bhukthi_info, \
             _kendraadhi_karaka_dhasa_bhukthi_info, _chara_dhasa_bhukthi_info, _lagnamsaka_dhasa_bhukthi_info, \
             _padhanadhamsa_dhasa_bhukthi_info]
     def _get_annual_dhasa_bhukthi(self,divisional_chart_factor=1):
-        _patyayini_dhasa_bhukthi_info = self._get_patyatini_dhasa_bhukthi(divisional_chart_factor=divisional_chart_factor)
+        _patyayini_dhasa_bhukthi_info = self._get_patyayini_dhasa(divisional_chart_factor=divisional_chart_factor)
         _mudda_dhasa_bhukthi_info = self._get_varsha_vimsottari_dhasa(self.julian_day, self.Place, self.years-1,divisional_chart_factor=divisional_chart_factor)
         _varsha_narayana_dhasa_bhukthi_info = self._get_varsha_narayana_dhasa(self.Date, self.birth_time, self.Place, self.years,divisional_chart_factor=divisional_chart_factor)
-        return [_patyayini_dhasa_bhukthi_info,_mudda_dhasa_bhukthi_info,_varsha_narayana_dhasa_bhukthi_info]
-    def _get_varsha_narayana_dhasa(self,dob,tob,place,years,divisional_chart_factor=1):
+        _sudarsana_chakra_dhasa_bhukthi_info = self._get_sudharsana_chakra_dhasa(self.Date, self.birth_time, self.Place,
+                                                                                 divisional_chart_factor=divisional_chart_factor)
+        _panchasvara_dhasa_bhukthi_info = self._get_panchasvara_dhasa(self.Date, self.birth_time, self.Place,
+                                                                                 divisional_chart_factor=divisional_chart_factor)
+        return [_patyayini_dhasa_bhukthi_info,_mudda_dhasa_bhukthi_info,_varsha_narayana_dhasa_bhukthi_info,
+                _sudarsana_chakra_dhasa_bhukthi_info, _panchasvara_dhasa_bhukthi_info]
+    def _get_varsha_narayana_dhasa(self,dob,tob,place,years,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import narayana
-        db = narayana.varsha_narayana_dhasa_bhukthi(dob, tob, place, years, divisional_chart_factor=divisional_chart_factor,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA)
+        db = narayana.varsha_narayana_dhasa_bhukthi(dob, tob, place, years,
+                            divisional_chart_factor=divisional_chart_factor,**kwargs)
         #print('varsha narayana dhasa',db)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_varsha_vimsottari_dhasa(self,jd, place, years,divisional_chart_factor=1):
+    def _get_varsha_vimsottari_dhasa(self,jd, place, years,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.annual import mudda
-        md = mudda.varsha_vimsottari_dhasa_bhukthi(jd, place, years,divisional_chart_factor=divisional_chart_factor)
+        db = mudda.varsha_vimsottari_dhasa_bhukthi(jd, place, years,divisional_chart_factor=divisional_chart_factor,
+                                                   **kwargs)
         dhasa_bhukti_info = []
-        for pd,pb,bs,_ in md:
-            dhasa_lord = utils.PLANET_NAMES[pd]
-            bhukthi_lord = utils.PLANET_NAMES[pb]
-            dhasa_bhukti_info.append((dhasa_lord+'-'+bhukthi_lord,bs))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_patyatini_dhasa_bhukthi(self,divisional_chart_factor=1):
+    def _get_patyayini_dhasa(self,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.annual import patyayini
         self.julian_years = drik.next_solar_date(self.julian_day, self.Place, self.years, self.months, self.sixty_hours)
-        p_d_b = patyayini.patyayini_dhasa(self.julian_years, self.Place, divisional_chart_factor=divisional_chart_factor)
-        #print('p_d_b',p_d_b)
+        db = patyayini.get_dhasa_bhukthi(self.julian_years, self.Place,
+                                       divisional_chart_factor=divisional_chart_factor,
+                                       compress_dhasa_to_annual=False,**kwargs)
         dhasa_bhukti_info = []
-        for p,bhukthis,_ in p_d_b:
-            #print('p,bhukthis',p,bhukthis)
-            if p=='L':
-                dhasa_lord = self._ascendant_str
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
             else:
-                dhasa_lord = utils.PLANET_NAMES[p]
-            for bk,bs in bhukthis:
-                #print('bk,bs',bk,bs)
-                if bk=='L':
-                    bhukthi_lord = self._ascendant_str
-                else:
-                    bhukthi_lord = utils.PLANET_NAMES[bk]
-                dhasa_bhukti_info.append((dhasa_lord+'-'+bhukthi_lord,bs))
-                #print('key',dhasa_lord+'-'+bhukthi_lord,'value',bs)
+                dhasa_lord_str = self._ascendant_str if dhasa_lord=='L' else utils.PLANET_NAMES[dhasa_lord]
+                bukthi_lord_str =self._ascendant_str if bukthi_lord=='L' else utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_tara_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         from jhora.horoscope.dhasa.graha import tara
-        db = tara.get_dhasa_bhukthi(dob, tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,**kwargs)
+        db = tara.get_dhasa_bhukthi(dob, tob, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            #dhasa_bhukti_info[utils.DHASA_LIST[dhasa_lord]+'-'+utils.BHUKTHI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'-'+utils.PLANET_NAMES[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]
+                bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_karaka_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         jd = utils.julian_day_number(dob, tob)
         from jhora.horoscope.dhasa.graha import karaka
         planet_positions = charts.rasi_chart(jd, place)
-        db = karaka.get_dhasa_antardhasa(dob, tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,
-                                         show_karaka_as_pair=1,**kwargs)
+        db = karaka.get_dhasa_antardhasa(dob, tob, place,show_karaka_as_pair=1,**kwargs)
         chara_karaka_names = [x+'_str' for x in house.chara_karaka_names]
         chara_karaka_dict = house.chara_karakas(planet_positions)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            [(dhasa_karaka,dhasa_lord), (bukthi_karaka,bukthi_lord),bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'\n'+self.cal_key_list[chara_karaka_names[dhasa_karaka]]+'\n'
-                                      +'-'+utils.PLANET_NAMES[bukthi_lord]+'\n'+self.cal_key_list[chara_karaka_names[bukthi_karaka]]+'\n',bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]
+            dhasa_karaka,dhasa_lord = lords[0]; bukthi_karaka,bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'\n'+self.cal_key_list[chara_karaka_names[dhasa_karaka]]+'\n'
+                                          +'-'+utils.PLANET_NAMES[bukthi_lord]+'\n'+self.cal_key_list[chara_karaka_names[bukthi_karaka]]+'\n',s_date_str))
         return dhasa_bhukti_info
     def _get_naisargika_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         from jhora.horoscope.dhasa.graha import naisargika
-        db = naisargika.get_dhasa_bhukthi(dob, tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,**kwargs)
+        db = naisargika.get_dhasa_bhukthi(dob, tob, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_str=self.cal_key_list['ascendant_str'] if dhasa_lord == const._ascendant_symbol else utils.PLANET_NAMES[dhasa_lord]
-            bukthi_str=self.cal_key_list['ascendant_str'] if bukthi_lord == const._ascendant_symbol else utils.PLANET_NAMES[bukthi_lord]
-            dhasa_bhukti_info.append((dhasa_str+'-'+bukthi_str,bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = self._ascendant_str if dhasa_lord=='L' else utils.PLANET_NAMES[dhasa_lord]
+                bukthi_lord_str =self._ascendant_str if bukthi_lord=='L' else utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_aayu_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         jd = utils.julian_day_number(dob, tob)
         from jhora.horoscope.dhasa.graha import aayu
-        self._aayu_dhasa_type,db = aayu.get_dhasa_antardhasa(jd, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,**kwargs)
+        self._aayu_dhasa_type,db = aayu.get_dhasa_antardhasa(jd, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_str=self._ascendant_str if dhasa_lord==const._ascendant_symbol else utils.PLANET_NAMES[dhasa_lord]
-            bukthi_str=self._ascendant_str if bukthi_lord==const._ascendant_symbol else utils.PLANET_NAMES[bukthi_lord]                
-            dhasa_bhukti_info.append((dhasa_str+'-'+bukthi_str,bukthi_start))
+        for row in db:
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+                s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+                dhasa_lord_str = self._ascendant_str if dhasa_lord=='L' else utils.PLANET_NAMES[dhasa_lord]
+                bukthi_lord_str =self._ascendant_str if bukthi_lord=='L' else utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
+        return dhasa_bhukti_info
+    def _get_pinda_aayu_dhasa_bhukthi(self,dob,tob,place,**kwargs):
+        jd = utils.julian_day_number(dob, tob)
+        from jhora.horoscope.dhasa.graha import aayu
+        self._aayu_dhasa_type,db = aayu.get_dhasa_antardhasa(jd, place,aayur_type=const.AAYU_TYPE.PINDA,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+                s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+                dhasa_lord_str = self._ascendant_str if dhasa_lord=='L' else utils.PLANET_NAMES[dhasa_lord]
+                bukthi_lord_str =self._ascendant_str if bukthi_lord=='L' else utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
+        return dhasa_bhukti_info
+    def _get_nisarga_aayu_dhasa_bhukthi(self,dob,tob,place,**kwargs):
+        jd = utils.julian_day_number(dob, tob)
+        from jhora.horoscope.dhasa.graha import aayu
+        self._aayu_dhasa_type,db = aayu.get_dhasa_antardhasa(jd, place,aayur_type=const.AAYU_TYPE.NISARGA,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+                s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+                dhasa_lord_str = self._ascendant_str if dhasa_lord=='L' else utils.PLANET_NAMES[dhasa_lord]
+                bukthi_lord_str =self._ascendant_str if bukthi_lord=='L' else utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
+        return dhasa_bhukti_info
+    def _get_amsa_aayu_dhasa_bhukthi(self,dob,tob,place,**kwargs):
+        jd = utils.julian_day_number(dob, tob)
+        from jhora.horoscope.dhasa.graha import aayu
+        self._aayu_dhasa_type,db = aayu.get_dhasa_antardhasa(jd, place,aayur_type=const.AAYU_TYPE.AMSA,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+                s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+                dhasa_lord_str = self._ascendant_str if dhasa_lord=='L' else utils.PLANET_NAMES[dhasa_lord]
+                bukthi_lord_str =self._ascendant_str if bukthi_lord=='L' else utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_vimsottari_dhasa_bhukthi(self,dob,tob,place,**kwargs):#,divisional_chart_factor=1):
         jd = utils.julian_day_number(dob, tob)
         from jhora.horoscope.dhasa.graha import vimsottari
         self._vimsottari_balance,db = vimsottari.get_vimsottari_dhasa_bhukthi(jd, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start]=db[i]
-            #dhasa_bhukti_info[utils.DHASA_LIST[dhasa_lord]+'-'+utils.BHUKTHI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'-'+utils.PLANET_NAMES[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_kaala_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         from jhora.horoscope.dhasa.graha import kaala
-        self._kaala_dhasa_type,db = kaala.get_dhasa_antardhasa(dob,tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,**kwargs)
+        self._kaala_dhasa_type,db = kaala.get_dhasa_antardhasa(dob,tob, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'-'+utils.PLANET_NAMES[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_chakra_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    def _get_chakra_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import chakra
-        db = chakra.get_dhasa_antardhasa(dob,tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,divisional_chart_factor=divisional_chart_factor)
+        db = chakra.get_dhasa_antardhasa(dob,tob, place,divisional_chart_factor=divisional_chart_factor,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_sandhya_panchaka_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    def _get_sandhya_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import sandhya
-        db = sandhya.get_dhasa_antardhasa(dob,tob, place,use_panchaka_variation=True,divisional_chart_factor=divisional_chart_factor)
+        db = sandhya.get_dhasa_antardhasa(dob,tob, place,use_pachaka_variation=False,
+                                          divisional_chart_factor=divisional_chart_factor,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_rasi_bhukthi_vimsottari_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         jd = utils.julian_day_number(dob, tob)
         from jhora.horoscope.dhasa.graha import vimsottari
-        _,db = vimsottari.get_vimsottari_dhasa_bhukthi(jd, place,**kwargs)
+        _,db = vimsottari.get_vimsottari_dhasa_bhukthi(jd, place,use_rasi_bhukthi_variation=True,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start]=db[i]
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_yoga_vimsottari_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         jd = utils.julian_day_number(dob, tob)
         from jhora.horoscope.dhasa.graha import yoga_vimsottari
         self._yoga_vimsottari_balance,db = yoga_vimsottari.get_dhasa_bhukthi(jd, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start]=db[i]
-            #dhasa_bhukti_info[utils.DHASA_LIST[dhasa_lord]+'-'+utils.BHUKTHI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'-'+utils.PLANET_NAMES[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_ashtottari_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         from jhora.horoscope.dhasa.graha import ashtottari
         jd = utils.julian_day_number(dob,tob)
         db = ashtottari.get_ashtottari_dhasa_bhukthi(jd, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            if not db[i]:
-                continue
-            [dhasa_lord, bukthi_lord,bukthi_start]=db[i]
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'-'+utils.PLANET_NAMES[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_tithi_ashtottari_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         from jhora.horoscope.dhasa.graha import tithi_ashtottari
         jd = utils.julian_day_number(dob,tob)
-        db = tithi_ashtottari.get_ashtottari_dhasa_bhukthi(jd, place,**kwargs)
+        db = tithi_ashtottari.get_dhasa_bhukthi(jd, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            if not db[i]:
-                continue
-            [dhasa_lord, bukthi_lord,bukthi_start]=db[i]
-            #dhasa_bhukti_info[utils.DHASA_LIST[dhasa_lord]+'-'+utils.BHUKTHI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'-'+utils.PLANET_NAMES[bukthi_lord],bukthi_start))
-        #print(dhasa_bhukti_info)
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_buddhi_gathi_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         from jhora.horoscope.dhasa.graha import buddhi_gathi
         jd = utils.julian_day_number(dob,tob)
-        db = buddhi_gathi.get_dhasa_bhukthi(dob,tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,**kwargs)
+        db = buddhi_gathi.get_dhasa_bhukthi(dob,tob, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            if not db[i]:
-                continue
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'-'+utils.PLANET_NAMES[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_yogini_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         from jhora.horoscope.dhasa.graha import yogini
-        db = yogini.get_dhasa_bhukthi(dob,tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,**kwargs)
+        db = yogini.get_dhasa_bhukthi(dob,tob, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            if not db[i]:
-                continue
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'-'+utils.PLANET_NAMES[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_tithi_yogini_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         from jhora.horoscope.dhasa.graha import tithi_yogini
-        db = tithi_yogini.get_dhasa_bhukthi(dob,tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,**kwargs)
+        db = tithi_yogini.get_dhasa_bhukthi(dob,tob, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            if not db[i]:
-                continue
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'-'+utils.PLANET_NAMES[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_shodasottari_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         from jhora.horoscope.dhasa.graha import shodasottari
-        db = shodasottari.get_dhasa_bhukthi(dob,tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,**kwargs)
+        db = shodasottari.get_dhasa_bhukthi(dob,tob, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            if not db[i]:
-                continue
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'-'+utils.PLANET_NAMES[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_dwadasottari_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         from jhora.horoscope.dhasa.graha import dwadasottari
-        db = dwadasottari.get_dhasa_bhukthi(dob,tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,**kwargs)
+        db = dwadasottari.get_dhasa_bhukthi(dob,tob, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            if not db[i]:
-                continue
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'-'+utils.PLANET_NAMES[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_dwisatpathi_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         from jhora.horoscope.dhasa.graha import dwisatpathi
-        db = dwisatpathi.get_dhasa_bhukthi(dob,tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,**kwargs)
+        db = dwisatpathi.get_dhasa_bhukthi(dob,tob, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            if not db[i]:
-                continue
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'-'+utils.PLANET_NAMES[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_panchottari_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         from jhora.horoscope.dhasa.graha import panchottari
-        db = panchottari.get_dhasa_bhukthi(dob,tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,**kwargs)
+        db = panchottari.get_dhasa_bhukthi(dob,tob, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            if not db[i]:
-                continue
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'-'+utils.PLANET_NAMES[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_satabdika_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         from jhora.horoscope.dhasa.graha import sataatbika
-        db = sataatbika.get_dhasa_bhukthi(dob,tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,**kwargs)
+        db = sataatbika.get_dhasa_bhukthi(dob,tob, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            if not db[i]:
-                continue
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'-'+utils.PLANET_NAMES[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_chaturaaseeti_sama_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         from jhora.horoscope.dhasa.graha import chathuraaseethi_sama
-        db = chathuraaseethi_sama.get_dhasa_bhukthi(dob,tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,**kwargs)
+        db = chathuraaseethi_sama.get_dhasa_bhukthi(dob,tob, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            if not db[i]:
-                continue
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'-'+utils.PLANET_NAMES[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_karana_chaturaaseeti_sama_dhasa_bhukthi(self,dob,tob,place,**kwargs):
+    def _get_karana_chaturaaseethi_sama_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         from jhora.horoscope.dhasa.graha import karana_chathuraaseethi_sama
-        db = karana_chathuraaseethi_sama.get_dhasa_bhukthi(dob,tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,**kwargs)
+        db = karana_chathuraaseethi_sama.get_dhasa_bhukthi(dob,tob, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            if not db[i]:
-                continue
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'-'+utils.PLANET_NAMES[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
+    def _get_shastihayini_dhasa_bhukthi(self,dob,tob,place,**kwargs):
+        return self._get_shashtisama_dhasa_bhukthi(dob,tob,place,**kwargs)
     def _get_shashtisama_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         from jhora.horoscope.dhasa.graha import shastihayani
-        db = shastihayani.get_dhasa_bhukthi(dob,tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,**kwargs)
+        db = shastihayani.get_dhasa_bhukthi(dob,tob, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            if not db[i]:
-                continue
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'-'+utils.PLANET_NAMES[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_shattrimsa_sama_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         from jhora.horoscope.dhasa.graha import shattrimsa_sama
-        db = shattrimsa_sama.get_dhasa_bhukthi(dob,tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,**kwargs)
+        db = shattrimsa_sama.get_dhasa_bhukthi(dob,tob, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            if not db[i]:
-                continue
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.PLANET_NAMES[dhasa_lord]+'-'+utils.PLANET_NAMES[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def _get_saptharishi_nakshathra_dhasa_bhukthi(self,dob,tob,place,**kwargs):
         from jhora.horoscope.dhasa.graha import saptharishi_nakshathra
-        db = saptharishi_nakshathra.get_dhasa_bhukthi(dob,tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA,**kwargs)
+        db = saptharishi_nakshathra.get_dhasa_bhukthi(dob,tob, place,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            if not db[i]:
-                continue
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.NAKSHATRA_LIST[dhasa_lord]+'-'+utils.NAKSHATRA_LIST[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.NAKSHATRA_LIST[dhasa_lord]; bukthi_lord_str =utils.NAKSHATRA_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_narayana_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    def _get_narayana_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import narayana
-        db = narayana.narayana_dhasa_for_rasi_chart(dob, tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.ANTARA)
-        dhasa_bhukti_info = [] #{}
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            #dhasa_bhukti_info[utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
-        return dhasa_bhukti_info
-    def _get_kendraadhi_rasi_dhasa(self,dob,tob,place,divisional_chart_factor=1):
-        from jhora.horoscope.dhasa.raasi import kendradhi_rasi
-        db = kendradhi_rasi.kendradhi_rasi_dhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor)
+        db = narayana.narayana_dhasa_for_divisional_chart(dob, tob, place,divisional_chart_factor=divisional_chart_factor,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            #dhasa_bhukti_info[utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_sudasa_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    
+    def _get_lagna_kendraadhi_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
+        return self._get_kendraadhi_rasi_dhasa(dob,tob,place,divisional_chart_factor,**kwargs)
+    def _get_kendraadhi_rasi_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
+        from jhora.horoscope.dhasa.raasi import kendradhi_rasi
+        db = kendradhi_rasi.lagna_kendradhi_rasi_dhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor,**kwargs)
+        dhasa_bhukti_info = []
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
+        return dhasa_bhukti_info
+    def _get_sudasa_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import sudasa
-        db = sudasa.sudasa_dhasa_bhukthi(dob, tob, place, divisional_chart_factor)
+        db = sudasa.get_dhasa_bhukthi(dob, tob, place, divisional_chart_factor,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            #dhasa_bhukti_info[utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_drig_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    def _get_drig_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import drig
-        db = drig.drig_dhasa_bhukthi(dob, tob, place, divisional_chart_factor)
+        db = drig.drig_dhasa_bhukthi(dob, tob, place, divisional_chart_factor,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            #dhasa_bhukti_info[utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_nirayana_dhasa(self,dob,tob,place,divisional_chart_factor=1):
-        from jhora.horoscope.dhasa.raasi import nirayana
-        db = nirayana.nirayana_shoola_dhasa_bhukthi(dob, tob, place, divisional_chart_factor)
+    def _get_niryaana_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
+        from jhora.horoscope.dhasa.raasi import niryaana
+        db = niryaana.get_dhasa_bhukthi(dob, tob, place, divisional_chart_factor,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            #dhasa_bhukti_info[utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_shoola_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    def _get_shoola_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import shoola
-        db = shoola.shoola_dhasa_bhukthi(dob, tob, place, divisional_chart_factor)
+        db = shoola.get_dhasa_bhukthi(dob, tob, place, divisional_chart_factor,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            #dhasa_bhukti_info[utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_kendraadhi_karaka_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    def _get_karaka_kendraadhi_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
+        return self._get_kendraadhi_karaka_dhasa(dob, tob, place, divisional_chart_factor,**kwargs)
+    def _get_kendraadhi_karaka_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import kendradhi_rasi
-        db = kendradhi_rasi.karaka_kendradhi_rasi_dhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor, karaka_index=1)
+        db = kendradhi_rasi.karaka_kendradhi_rasi_dhasa(dob, tob, place,
+                                divisional_chart_factor=divisional_chart_factor, karaka_index=1,**kwargs)
         dhasa_bhukti_info = []
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            #dhasa_bhukti_info[utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_chara_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    def _get_chara_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import chara
-        db = chara.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor, chara_method=1)
-        #print('chara dasa',db)
+        db = chara.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor,**kwargs)
         dhasa_bhukti_info = []
-        for _dhasa,_bhukthi,dhasa_start,_ in db:
-            dhasa_lord = utils.RAASI_LIST[_dhasa]
-            bukthi_lord = utils.RAASI_LIST[_bhukthi]
-            #dhasa_start = '%04d-%02d-%02d' %(y,m,d) +' '+utils.to_dms(fh, as_string=True)
-            dhasa_bhukti_info.append((dhasa_lord+'-'+bukthi_lord,dhasa_start))
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_lagnamsaka_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    def _get_lagnamsaka_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import lagnamsaka
-        db = lagnamsaka.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor)
-        dhasa_bhukti_info = [] #{}
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            #dhasa_bhukti_info[utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        db = lagnamsaka.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_padhanadhamsa_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    def _get_padhanadhamsa_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import padhanadhamsa
-        db = padhanadhamsa.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor)
-        dhasa_bhukti_info = [] #{}
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            #dhasa_bhukti_info[utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        db = padhanadhamsa.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_mandooka_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    def _get_mandooka_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import mandooka
-        db = mandooka.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor)
-        dhasa_bhukti_info = [] #{}
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            #dhasa_bhukti_info[utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        db = mandooka.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_sthira_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    def _get_sthira_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import sthira
-        db = sthira.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor)
-        dhasa_bhukti_info = [] #{}
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            #dhasa_bhukti_info[utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        db = sthira.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_tara_lagna_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    def _get_tara_lagna_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import tara_lagna
-        db = tara_lagna.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor)
-        dhasa_bhukti_info = [] #{}
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            #dhasa_bhukti_info[utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        db = tara_lagna.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_brahma_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    def _get_brahma_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import brahma
-        db = brahma.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor)
-        dhasa_bhukti_info = [] #{}
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            #dhasa_bhukti_info[utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        db = brahma.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_varnada_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    def _get_varnada_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import varnada
-        db = varnada.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor)
-        dhasa_bhukti_info = [] #{}
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            #dhasa_bhukti_info[utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        db = varnada.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_yogardha_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    def _get_yogardha_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import yogardha
-        db = yogardha.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor)
-        dhasa_bhukti_info = [] #{}
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            #dhasa_bhukti_info[utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        db = yogardha.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_navamsa_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    def _get_navamsa_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import navamsa
-        db = navamsa.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor)
-        dhasa_bhukti_info = [] #{}
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            #dhasa_bhukti_info[utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord]]=bukthi_start
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        db = navamsa.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_paryaaya_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    def _get_paryaaya_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import paryaaya
-        dhasa_type, db = paryaaya.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor)
-        #print('paryaaya dhasa',db)
-        dhasa_bhukti_info = [] #{}
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
-            #dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        dhasa_type, db = paryaaya.get_dhasa_antardhasa(dob, tob, place,divisional_chart_factor=divisional_chart_factor,
+                                                       **kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_trikona_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    def _get_trikona_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import trikona
-        db = trikona.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor)
-        #print('trikona dhasa',db)
-        dhasa_bhukti_info = [] #{}
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
-            #dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        db = trikona.get_dhasa_antardhasa(dob, tob, place, divisional_chart_factor=divisional_chart_factor,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
-    def _get_kalachakra_dhasa(self,dob,tob,place,divisional_chart_factor=1):
+    def _get_kalachakra_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
         from jhora.horoscope.dhasa.raasi import kalachakra
         jd_at_dob = utils.julian_day_number(dob, tob)
         pp = charts.divisional_chart(jd_at_dob, place, divisional_chart_factor=divisional_chart_factor)
         moon_long = pp[2][1][0]*30+pp[2][1][1]
-        db = kalachakra.kalachakra_dhasa(moon_long, jd_at_dob)
-        dhasa_bhukti_info = [] #{}
-        for i in range(len(db)):
-            [dhasa_lord, bukthi_lord,bukthi_start,_]=db[i]
-            dhasa_bhukti_info.append((utils.RAASI_LIST[dhasa_lord]+'-'+utils.RAASI_LIST[bukthi_lord],bukthi_start))
+        db = kalachakra.kalachakra_dhasa(moon_long, jd_at_dob,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
+        return dhasa_bhukti_info
+    def _get_chathurvidha_lagna_utthara_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
+        from jhora.horoscope.dhasa.raasi import chathurvidha_utthara
+        db = chathurvidha_utthara.get_dhasa_antardhasa(dob, tob, place,
+                                                    divisional_chart_factor=divisional_chart_factor,
+                                                    method=1,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
+        return dhasa_bhukti_info
+    def _get_chathurvidha_kendra_utthara_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
+        from jhora.horoscope.dhasa.raasi import chathurvidha_utthara
+        db = chathurvidha_utthara.get_dhasa_antardhasa(dob, tob, place,
+                                                    divisional_chart_factor=divisional_chart_factor,
+                                                    method=2,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
+        return dhasa_bhukti_info
+    def _get_chathurvidha_trikona_utthara_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
+        from jhora.horoscope.dhasa.raasi import chathurvidha_utthara
+        db = chathurvidha_utthara.get_dhasa_antardhasa(dob, tob, place,
+                                                    divisional_chart_factor=divisional_chart_factor,
+                                                    method=3,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
+        return dhasa_bhukti_info
+    def _get_chathurvidha_dasha_utthara_dhasa(self,dob,tob,place,divisional_chart_factor=1,**kwargs):
+        from jhora.horoscope.dhasa.raasi import chathurvidha_utthara
+        db = chathurvidha_utthara.get_dhasa_antardhasa(dob, tob, place,
+                                                    divisional_chart_factor=divisional_chart_factor,
+                                                    method=4,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
         return dhasa_bhukti_info
     def get_chara_karakas_for_chart(self,jd_at_dob, place, divisional_chart_factor=1, chart_method=None,base_rasi=None,
-                                    count_from_end_of_sign=None):
+                                    count_from_end_of_sign=None,dhasa_progression_correction=0.0):
         _vl_chart = ['' for _ in range(12)]
         planet_positions = charts.divisional_chart(jd_at_dob, place,divisional_chart_factor=divisional_chart_factor,
-                            chart_method=chart_method,base_rasi=base_rasi, count_from_end_of_sign=count_from_end_of_sign)
+                            chart_method=chart_method,base_rasi=base_rasi, count_from_end_of_sign=count_from_end_of_sign,
+                            dhasa_progression_correction=dhasa_progression_correction)
         _karakas = get_chara_karakas(jd_at_dob, place)
         for ki,k in enumerate(_karakas):
             h = planet_positions[k+1][1][0]
@@ -1571,74 +1907,79 @@ class Horoscope():
         _karaka_chart_dict = {self.cal_key_list['karakas_str']:_vl_chart}
         return _karaka_chart_dict
     def get_chara_karakas_for_mixed_chart(self,jd_at_dob, place,varga_factor_1=None, chart_method_1=None,
-                                          varga_factor_2=None, chart_method_2=None):
+                                          varga_factor_2=None, chart_method_2=None,
+                                          dhasa_progression_correction=0.0):
         _vl_chart = ['' for _ in range(12)]
         planet_positions = charts.mixed_chart(jd_at_dob, place, varga_factor_1=varga_factor_1, chart_method_1=chart_method_1,
-                                varga_factor_2=varga_factor_2, chart_method_2=chart_method_2)
-        _karakas = get_chara_karakas(jd_at_dob, place)
+                                varga_factor_2=varga_factor_2, chart_method_2=chart_method_2,
+                                                  dhasa_progression_correction=dhasa_progression_correction)
+        _karakas = get_chara_karakas(jd_at_dob, place,dhasa_progression_correction=dhasa_progression_correction)
         for ki,k in enumerate(_karakas):
             h = planet_positions[k+1][1][0]
             _vl_chart[h] = self.cal_key_list[const.chara_karaka_names[ki]+'_short_str']+'\n'+_vl_chart[h]
         _karaka_chart_dict = {self.cal_key_list['karakas_str']:_vl_chart}
         return _karaka_chart_dict
     def get_special_lagnas_for_chart(self,jd_at_dob, place, divisional_chart_factor=1, chart_method=None,base_rasi=None,
-                                    count_from_end_of_sign=None):
+                                    count_from_end_of_sign=None,dhasa_progression_correction=0.0):
         y,m,d,fh = utils.jd_to_gregorian(jd_at_dob);dob = drik.Date(y,m,d); tob = (fh,0,0)
         spl_list = ['hora_lagna','bhava_lagna','ghati_lagna','vighati_lagna','sree_lagna',
                    'pranapada_lagna','indu_lagna','bhrigu_bindhu_lagna','kunda_lagna','varnada_lagna',]
         _vl_chart = ['' for _ in range(12)]
         for spl in spl_list:
             if spl == 'varnada_lagna':
-                vl = eval('charts.'+spl+'(dob,tob,place,divisional_chart_factor=divisional_chart_factor,chart_method=chart_method,base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign)')
+                vl = eval('charts.'+spl+'(dob,tob,place,divisional_chart_factor=divisional_chart_factor,chart_method=chart_method,base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign,dhasa_progression_correction=dhasa_progression_correction)')
             else:
                 vl = eval('drik.'+spl+'(jd_at_dob,place,divisional_chart_factor=divisional_chart_factor,chart_method=chart_method,base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign)')
             _vl_chart[vl[0]] += self.cal_key_list[spl+'_short_str'] +'\n'
         _special_lagna_dict = {self.cal_key_list['special_lagnas_str']:_vl_chart}
         return _special_lagna_dict 
     def get_special_lagnas_for_mixed_chart(self,jd_at_dob, place,varga_factor_1=None, chart_method_1=None,
-                                          varga_factor_2=None, chart_method_2=None):
+                                          varga_factor_2=None, chart_method_2=None,dhasa_progression_correction=0.0):
         y,m,d,fh = utils.jd_to_gregorian(jd_at_dob);dob = drik.Date(y,m,d); tob = (fh,0,0)
         spl_list = ['hora_lagna','bhava_lagna','ghati_lagna','vighati_lagna','sree_lagna',
                    'pranapada_lagna','indu_lagna','bhrigu_bindhu_lagna','kunda_lagna','varnada_lagna',]
         _vl_chart = ['' for _ in range(12)]
         for spl in spl_list:
             if spl == 'varnada_lagna':
-                vl = eval('charts.'+spl+'_mixed_chart(dob,tob, place, varga_factor_1=varga_factor_1, chart_method_1=chart_method_1, varga_factor_2=varga_factor_2, chart_method_2=chart_method_2)')
+                vl = eval('charts.'+spl+'_mixed_chart(dob,tob, place, varga_factor_1=varga_factor_1, chart_method_1=chart_method_1, varga_factor_2=varga_factor_2, chart_method_2=chart_method_2,dhasa_progression_correction=dhasa_progression_correction)')
             else:
-                vl = eval('drik.'+spl+'_mixed_chart(jd_at_dob, place, varga_factor_1=varga_factor_1, chart_method_1=chart_method_1, varga_factor_2=varga_factor_2, chart_method_2=chart_method_2)')
+                vl = eval('drik.'+spl+'_mixed_chart(jd_at_dob, place, varga_factor_1=varga_factor_1, chart_method_1=chart_method_1, varga_factor_2=varga_factor_2, chart_method_2=chart_method_2,dhasa_progression_correction=dhasa_progression_correction)')
             _vl_chart[vl[0]] += self.cal_key_list[spl+'_short_str'] +'\n'
         _special_lagna_dict = {self.cal_key_list['special_lagnas_str']:_vl_chart}
         return _special_lagna_dict
     def get_sphutas_for_chart(self,jd_at_dob, place, divisional_chart_factor=1, chart_method=None,base_rasi=None,
-                                    count_from_end_of_sign=None):
+                                    count_from_end_of_sign=None,dhasa_progression_correction=0.0):
         y,m,d,fh = utils.jd_to_gregorian(jd_at_dob);dob = drik.Date(y,m,d); tob = (fh,0,0)
         spl_list = ['tri','chatur','pancha','prana','deha','mrityu','sookshma_tri','beeja','kshetra','tithi','yoga',
                     'yogi','avayogi','rahu_tithi']
         _vl_chart = ['' for _ in range(12)]
         for spl in spl_list:
             from jhora.horoscope.chart import sphuta
-            vl = eval('sphuta.'+spl+'_sphuta(dob,tob,place,divisional_chart_factor=divisional_chart_factor,chart_method=chart_method,base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign)')
+            vl = eval('sphuta.'+spl+'_sphuta(dob,tob,place,divisional_chart_factor=divisional_chart_factor,chart_method=chart_method,base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign,dhasa_progression_correction=dhasa_progression_correction)')
             _vl_chart[vl[0]] += self.cal_key_list[spl+'_sphuta_short_str'] +'\n'
         _sphuta_menu_dict = {self.cal_key_list['sphuta_str']:_vl_chart}
         return _sphuta_menu_dict
     def get_sphutas_for_mixed_chart(self,jd_at_dob, place,varga_factor_1=None, chart_method_1=None,
-                                          varga_factor_2=None, chart_method_2=None):
+                                          varga_factor_2=None, chart_method_2=None,
+                                          dhasa_progression_correction=0.0):
         y,m,d,fh = utils.jd_to_gregorian(jd_at_dob);dob = drik.Date(y,m,d); tob = (fh,0,0)
         spl_list = ['tri','chatur','pancha','prana','deha','mrityu','sookshma_tri','beeja','kshetra','tithi','yoga',
                     'yogi','avayogi','rahu_tithi']
         _vl_chart = ['' for _ in range(12)]
         for spl in spl_list:
             from jhora.horoscope.chart import sphuta
-            vl = eval('sphuta.'+spl+'_sphuta_mixed_chart(dob,tob,place, varga_factor_1=varga_factor_1, chart_method_1=chart_method_1, varga_factor_2=varga_factor_2, chart_method_2=chart_method_2)')
+            vl = eval('sphuta.'+spl+'_sphuta_mixed_chart(dob,tob,place, varga_factor_1=varga_factor_1, chart_method_1=chart_method_1, varga_factor_2=varga_factor_2, chart_method_2=chart_method_2,dhasa_progression_correction=dhasa_progression_correction)')
             _vl_chart[vl[0]] += self.cal_key_list[spl+'_sphuta_short_str'] +'\n'
         _sphuta_menu_dict = {self.cal_key_list['sphuta_str']:_vl_chart}
         return _sphuta_menu_dict
     def get_ava_saha_yoga_info_for_chart(self,jd_at_dob, place, divisional_chart_factor=1, chart_method=None,base_rasi=None,
-                                    count_from_end_of_sign=None):
+                                    count_from_end_of_sign=None,dhasa_progression_correction=0.0):
         y,m,d,fh = utils.jd_to_gregorian(jd_at_dob);dob = drik.Date(y,m,d); tob = (fh,0,0)
         line_sep = '<br>'
         from jhora.horoscope.chart import sphuta
-        yh,yl = sphuta.yogi_sphuta(dob,tob,place,divisional_chart_factor=divisional_chart_factor,chart_method=chart_method,base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign)
+        yh,yl = sphuta.yogi_sphuta(dob,tob,place,divisional_chart_factor=divisional_chart_factor,chart_method=chart_method,
+                                   base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign,
+                                   dhasa_progression_correction=dhasa_progression_correction)
         ystr = self.cal_key_list['yogi_sphuta_str']+' '+self.cal_key_list['raasi_str']+':'+\
                 utils.RAASI_LIST[yh]+' '+self.cal_key_list['longitude_str']+':'+utils.to_dms(yl,is_lat_long='plong')
         ynak = drik.nakshatra_pada(yh*30+yl)
@@ -1650,7 +1991,9 @@ class Horoscope():
         sahayogi_planet = const._house_owners_list[yh]
         ystr += line_sep+self.cal_key_list['sahayogi_str']+' '+self.cal_key_list['planet_str']+':'+ \
                 utils.PLANET_NAMES[sahayogi_planet]
-        yh,yl = sphuta.avayogi_sphuta(dob,tob,place,divisional_chart_factor=divisional_chart_factor,chart_method=chart_method,base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign)
+        yh,yl = sphuta.avayogi_sphuta(dob,tob,place,divisional_chart_factor=divisional_chart_factor,chart_method=chart_method,
+                                      base_rasi=base_rasi,count_from_end_of_sign=count_from_end_of_sign,
+                                      dhasa_progression_correction=dhasa_progression_correction)
         ynak = drik.nakshatra_pada(yh*30+yl)
         ystr += line_sep+self.cal_key_list['avayogi_sphuta_str']+' '+self.cal_key_list['raasi_str']+':'+\
                 utils.RAASI_LIST[yh]+' '+self.cal_key_list['longitude_str']+':'+utils.to_dms(yl,is_lat_long='plong')
@@ -1663,11 +2006,14 @@ class Horoscope():
         key = self.cal_key_list['yogi_sphuta_str']+', '+self.cal_key_list['avayogi_sphuta_str']+', '+self.cal_key_list['sahayogi_str']
         return {key:ystr}       
     def get_ava_saha_yoga_for_mixed_chart(self,jd_at_dob, place,varga_factor_1=None, chart_method_1=None,
-                                          varga_factor_2=None, chart_method_2=None):
+                                          varga_factor_2=None, chart_method_2=None,
+                                          dhasa_progression_correction=0.0):
         y,m,d,fh = utils.jd_to_gregorian(jd_at_dob);dob = drik.Date(y,m,d); tob = (fh,0,0)
         line_sep = '<br>'
         from jhora.horoscope.chart import sphuta
-        yh,yl = sphuta.yogi_sphuta_mixed_chart(dob,tob,place, varga_factor_1=varga_factor_1, chart_method_1=chart_method_1, varga_factor_2=varga_factor_2, chart_method_2=chart_method_2)
+        yh,yl = sphuta.yogi_sphuta_mixed_chart(dob,tob,place, varga_factor_1=varga_factor_1, chart_method_1=chart_method_1,
+                                               varga_factor_2=varga_factor_2, chart_method_2=chart_method_2,
+                                               dhasa_progression_correction=dhasa_progression_correction)
         ystr = self.cal_key_list['yogi_sphuta_str']+' '+self.cal_key_list['raasi_str']+':'+\
                 utils.RAASI_LIST[yh]+' '+self.cal_key_list['longitude_str']+':'+utils.to_dms(yl,is_lat_long='plong')
         ynak = drik.nakshatra_pada(yh*30+yl)
@@ -1679,7 +2025,9 @@ class Horoscope():
         sahayogi_planet = const._house_owners_list[yh]
         ystr += line_sep+self.cal_key_list['sahayogi_str']+' '+self.cal_key_list['planet_str']+':'+ \
                 utils.PLANET_NAMES[sahayogi_planet]
-        yh,yl = sphuta.avayogi_sphuta_mixed_chart(dob,tob,place, varga_factor_1=varga_factor_1, chart_method_1=chart_method_1, varga_factor_2=varga_factor_2, chart_method_2=chart_method_2)
+        yh,yl = sphuta.avayogi_sphuta_mixed_chart(dob,tob,place, varga_factor_1=varga_factor_1, chart_method_1=chart_method_1,
+                                                  varga_factor_2=varga_factor_2, chart_method_2=chart_method_2,
+                                                  dhasa_progression_correction=dhasa_progression_correction)
         ynak = drik.nakshatra_pada(yh*30+yl)
         ystr += line_sep+self.cal_key_list['avayogi_sphuta_str']+' '+self.cal_key_list['raasi_str']+':'+\
                 utils.RAASI_LIST[yh]+' '+self.cal_key_list['longitude_str']+':'+utils.to_dms(yl,is_lat_long='plong')
@@ -1705,94 +2053,230 @@ class Horoscope():
             #print(key,value)
         _saham_menu_dict = {self.cal_key_list['saham_str']:_vl_chart}
         return _saham_menu_dict, _saham_info        
-def get_chara_karakas(jd, place, years=1,months=1,sixty_hours=1,calculation_type='drik',pravesha_type=0):
-    rasi_planet_positions = charts.rasi_chart(jd, place, years, months, sixty_hours, calculation_type, pravesha_type)
+    def _get_sudharsana_chakra_dhasa(self,dob,tob,place,**kwargs):
+        from jhora.horoscope.dhasa import sudharsana_chakra
+        jd_at_dob = utils.julian_day_number(dob, tob)
+        db = sudharsana_chakra.sudharsana_chakra_dhasa_for_divisional_chart(jd_at_dob, place,
+                                                antardhasa_from_lord_of_dhasa_sign=True,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; smp = lords[0]; sap = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                smp_str='('+utils.RAASI_SHORT_LIST[smp[0]]+';'+utils.RAASI_SHORT_LIST[smp[1]]+';'+utils.RAASI_SHORT_LIST[smp[2]]+')'
+                sap_str='('+utils.RAASI_SHORT_LIST[sap[0]]+';'+utils.RAASI_SHORT_LIST[sap[1]]+';'+utils.RAASI_SHORT_LIST[sap[2]]+')'
+                s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+                dhasa_bhukti_info.append((smp_str+'-'+sap_str,s_date_str))
+        return dhasa_bhukti_info
+    def _get_panchasvara_dhasa(self,dob,tob,place,**kwargs):
+        from jhora.horoscope.dhasa import panchasvara
+        jd_at_dob = utils.julian_day_number(dob, tob)
+        db = panchasvara.get_dhasa_bhukthi(dob, tob, place,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.resource_strings[dhasa_lord+'_str']
+                bukthi_lord_str =utils.resource_strings[bukthi_lord+'_str'] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
+        return dhasa_bhukti_info
+    def _get_raashiyanka_dhasa(self,dob,tob,place,**kwargs):
+        from jhora.horoscope.dhasa.raasi import raashiyanka
+        db = raashiyanka.get_dhasa_bhukthi(dob, tob, place,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
+        return dhasa_bhukti_info
+    def _get_pachaka_dhasa(self,dob,tob,place,**kwargs):
+        from jhora.horoscope.dhasa.raasi import sandhya
+        db = sandhya.get_dhasa_antardhasa(dob,tob, place,use_pachaka_variation=True,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
+        return dhasa_bhukti_info
+    def _get_rashmi_dhasa_bhukthi(self,dob,tob,place,**kwargs):
+        from jhora.horoscope.dhasa.graha import rashmi
+        db = rashmi.get_rashmi_dhasa_bhukthi(dob, tob, place,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
+        return dhasa_bhukti_info
+    def _get_ashtaka_varga_pinda_dhasa_bhukthi(self,dob,tob,place,**kwargs):
+        """ Ashtaka Varga as Graha Dhasa """
+        from jhora.horoscope.dhasa.graha import ashtaka_varga
+        db = ashtaka_varga.get_ashtaka_varga_dhasa_bhukthi(dob, tob, place,
+                                            dhasa_method=const.ASHTAKAVARGA_DHASA_METHOD.PINDA_PLANET,
+                                            start_rule = const.ASHTAKAVARGA_DHASA_START_RULE.MAX_STRENGTH,
+                                            sequence_rule=const.ASHTAKAVARGA_DHASA_SEQUENCE_RULE.STRENGTH_ORDER,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
+        return dhasa_bhukti_info
+    def _get_ashtaka_varga_planet_dhasa_bhukthi(self,dob,tob,place,**kwargs):
+        """ Ashtaka Varga as Graha Dhasa """
+        from jhora.horoscope.dhasa.graha import ashtaka_varga
+        db = ashtaka_varga.get_ashtaka_varga_dhasa_bhukthi(dob, tob, place,
+                                            dhasa_method=const.ASHTAKAVARGA_DHASA_METHOD.BAV_PLANET,
+                                            start_rule = const.ASHTAKAVARGA_DHASA_START_RULE.MAX_STRENGTH,
+                                            sequence_rule=const.ASHTAKAVARGA_DHASA_SEQUENCE_RULE.STRENGTH_ORDER,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.PLANET_NAMES[dhasa_lord]; bukthi_lord_str =utils.PLANET_NAMES[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
+        return dhasa_bhukti_info
+    def _get_ashtaka_varga_sign_dhasa(self,dob,tob,place,**kwargs):
+        """ Ashtaka Varga as Raasi Dhasa """
+        from jhora.horoscope.dhasa.graha import ashtaka_varga
+        db = ashtaka_varga.get_ashtaka_varga_dhasa_bhukthi(dob, tob, place,
+                                            dhasa_method=const.ASHTAKAVARGA_DHASA_METHOD.SAV_SIGN,
+                                            start_rule = const.ASHTAKAVARGA_DHASA_START_RULE.MAX_STRENGTH,
+                                            sequence_rule=const.ASHTAKAVARGA_DHASA_SEQUENCE_RULE.STRENGTH_ORDER,**kwargs)
+        dhasa_bhukti_info = []
+        for row in db:
+            lords = row[0]; _date=row[1]; dhasa_lord = lords[0]; bukthi_lord = lords[1]
+            s_date_str = s_date_str = f"{_date[0]:04d}-{_date[1]:02d}-{_date[2]:02d} "+utils.to_dms(_date[3])
+            if self.get_dhasa_bhukthi_as_raw_data:
+                dhasa_bhukti_info.append(row)
+            else:
+                dhasa_lord_str = utils.RAASI_LIST[dhasa_lord]; bukthi_lord_str =utils.RAASI_LIST[bukthi_lord] 
+                dhasa_bhukti_info.append((dhasa_lord_str+'-'+bukthi_lord_str,s_date_str))
+        return dhasa_bhukti_info
+
+def get_chara_karakas(jd, place, years=1,months=1,sixty_hours=1,calculation_type='drik',pravesha_type=0,
+                      dhasa_progression_correction=0.0):
+    rasi_planet_positions = charts.rasi_chart(jd, place, years, months, sixty_hours, calculation_type, pravesha_type,
+                                              dhasa_progression_correction=dhasa_progression_correction)
     return house.chara_karakas(rasi_planet_positions)
+
 if __name__ == "__main__":
     horoscope_language = 'ta' # """ Matplotlib charts available only English"""
+    utils.set_language(horoscope_language)
     dob = drik.Date(1996,12,7); tob = (10,34,0); place = drik.Place('Chennai,IN',13.0389, 80.2619, +5.5)
     chart_index = 8; dcf = 3; chart_method = 1; base_rasi=None; count_from_end_of_sign=None
     varga_factor_1 = 9; chart_method_1=1; varga_factor_2=12; chart_method_2=1
     jd_at_dob = utils.julian_day_number(dob, tob)
+    from datetime import datetime
+    current_date_str,current_time_str = datetime.now().strftime('%Y,%m,%d;%H:%M:%S').split(';')
+    y,m,d = map(int,current_date_str.split(','))
+    hh,mm,ss = map(int,current_time_str.split(':'))
+    #current_date_jd = utils.julian_day_number(drik.Date(y,m,d),(hh,mm,ss))
+    current_date_jd = utils.julian_day_number(drik.Date(2026,3,19),(18,30,0))
+    
     a = Horoscope(place_with_country_code=place.Place,latitude=place.latitude,longitude=place.longitude,
-                  timezone_offset=place.timezone,date_in=drik.Date(dob[0],dob[1],dob[2]),birth_time="10:34:00")
-
-    horo_info,chart_info,asc_info = a.get_horoscope_information_for_chart(chart_index=chart_index, chart_method=chart_method,
-                                            divisional_chart_factor=dcf, base_rasi=base_rasi,
-                                            count_from_end_of_sign=count_from_end_of_sign, varnada_method=1)
-    print(a.calendar_info)
-    print('horo_info',horo_info)
-    print('chart_info',chart_info)
-    print('asc_info',asc_info)
-    print('_22nd_drekkana',a._22nd_drekkana)
+                  timezone_offset=place.timezone,date_in=drik.Date(dob[0],dob[1],dob[2]),birth_time="10:34:00",
+                  language=horoscope_language)
+    import time
+    GRAHA_DHASA_PKG = "jhora.horoscope.dhasa.graha"
+    RAASI_DHASA_PKG = "jhora.horoscope.dhasa.raasi"
+    ANNUAL_DHASA_PKG = "jhora.horoscope.dhasa.annual"
+    a.get_dhasa_bhukthi_as_raw_data = True
+    import traceback
+    all_graha = list(const._graha_dhasa_dict.keys())
+    all_rasi  = list(const._rasi_dhasa_dict.keys())
+    all_dhasas = all_graha + all_rasi
+    _multi_cycle_dhasas = const._multi_cycle_dhasas
+    results = {}
+    errors = {}
+    for dhasa_name in ['aayu']:#all_dhasas:
+        start_time = time.time()
+        try:
+            dkey = dhasa_name.lower()
+            if dkey in const._graha_dhasa_dict:
+                method_name = f"_get_{dkey}_dhasa_bhukthi"
+            elif dkey in const._rasi_dhasa_dict:
+                method_name = f"_get_{dkey}_dhasa"
+            else:
+                if dkey in const.special_dhasas:
+                    method_name = f"_get_{dkey}_dhasa"
+                else:
+                    raise ValueError(
+                        f"{dkey} should be one of const._graha_dhasa_dict or const._rasi_dhasa_dict."
+                    )
+            func = getattr(a, method_name, None)
+            if not callable(func):
+                raise AttributeError(f"{method_name} is not a callable function on module 'a'")
+            db = func(dob, tob, place, dhasa_level_index=1); print(db);exit()
+            print(dhasa_name, "total dhasa periods", len(db))
+            dhasa_cycle_count = _multi_cycle_dhasas.get(dkey, 1)
+            rd = utils.get_running_dhasa_at_all_levels_for_given_date(
+                current_date_jd, db, 6,
+                extract_running_period_for_all_levels=True,
+                dhasa_cycle_count=dhasa_cycle_count,
+                #is_naisargika_dhasa = True,
+            )
+            # Store successful result summary
+            results[dhasa_name] = {
+                "total dhasa periods": len(db),
+                "running dhasa": rd,
+            }
+            print(results[dhasa_name])
+        except Exception as e:
+            # Log the error but continue with next dhasa
+            tb = traceback.format_exc()
+            errors[dhasa_name] = tb
+            print(f"[ERROR] {dhasa_name}: {e}")
+            # Optionally continue; the loop will continue anyway
+    
+        finally:
+            elapsed = time.time() - start_time
+            print(dhasa_name, f"{elapsed:.3f} seconds")
+    
+    # DO NOT call exit() here; let the script finish to see the summary
+    print("\n=== SUMMARY ===")
+    print("Succeeded:", list(results.keys()))
+    if errors:
+        print("\nFailed:")
+        for name, tb in errors.items():
+            print(f"--- {name} ---")
+            print(tb)
     exit()
-    planet_positions = charts.mixed_chart(jd_at_dob, place, varga_factor_1=varga_factor_1, chart_method_1=chart_method_1,
-                                              varga_factor_2=varga_factor_2, chart_method_2=chart_method_2)
-    planet_positions = charts.divisional_chart(jd_at_dob, place,divisional_chart_factor=dcf,
-                            chart_method=chart_method,base_rasi=base_rasi,
-                            count_from_end_of_sign=count_from_end_of_sign)
-    print('yogi info chart',a.get_ava_saha_yoga_info_for_chart(jd_at_dob, place, dcf, chart_method, base_rasi, count_from_end_of_sign))
-    exit()
-    chart_index_1 = 8; chart_method_1=1; chart_index_2=12; chart_method_2=1
-    horo_info,chart_info,asc_info = a.get_horoscope_information_for_mixed_chart(chart_index_1, chart_method_1, 
-                                                                                chart_index_2, chart_method_2)
-    print('chart_index_1',chart_index_1,'chart_method_1',chart_method_1)
-    print('chart_index_2',chart_index_2,'chart_method_2',chart_method_2)
-    print('horo_info',horo_info)
-    print('chart_info',chart_info)
-    print('asc_info',asc_info)
-    print('arudha lagna data',a._arudha_lagna_data_kundali)
-    print('_hora_lagna_data_mixed',a._hora_lagna_data_kundali)
-    print('_ghat_lagna_data_mixed',a._ghati_lagna_data_kundali)
-    print('_vighati_lagna_data_mixed',a._vighati_lagna_data_kundali)
-    print('_bhava_lagna_data_mixed',a._bhava_lagna_data_kundali)
-    print('_sree_lagna_data_mixed',a._sree_lagna_data_kundali)
-    print('_maandhi_data_mixed',a._maandhi_data_kundali)
-    print('varnada_data_mixed',a._varnada_lagna_data_kundali)
-    exit()
-    print(a.calendar_info)
-    print(a.horoscope_charts[0])
-    #exit()
-    #pp = charts.rasi_chart(jd_at_dob, place)
-    #h_to_p = utils.get_house_planet_list_from_planet_positions(pp)
-    planet = 2
-    h_to_p = ['5/2/3/0','','','L/4','6/7','','','1','','','8','']
-    p_to_h = utils.get_planet_to_house_dict_from_chart(h_to_p)
-    print('aspects of ',utils.PLANET_NAMES[planet],house.aspected_planets_of_the_raasi(h_to_p, p_to_h[planet]))
-    #exit()
-    as_string = True
-    a= Horoscope(place_with_country_code=place.Place,latitude=place.latitude,
-                 longitude=place.longitude,timezone_offset=place.timezone,date_in=dob,birth_time='10:34:00',
-                 language=horoscope_language)
-    #a= Horoscope(latitude=35.994,longitude=-78.8986,timezone_offset=-4.0,date_in=dob,birth_time='23:43:00'
-    a._sphuta_data = {}
-    print(a._get_sphuta(dob, tob, place,divisional_chart_factor=1))
-    print(a._sphuta_data)
-    exit()
-    db = a._get_kalachakra_dhasa(dob, tob, place)
-    print(db)
-    exit()
-    a._arudha_lagna_data = {}
-    a._get_arudha_padhas(dob, tob, place, divisional_chart_factor=1)
-    a._get_arudha_padhas(dob, tob, place, divisional_chart_factor=9)
-    exit()
-    #db = a._get_drig_dhasa_bhukthi(dob, tob, place)
-    #db = a._get_ashtottari_dhasa_bhukthi(dob, tob, place)
-    db = a._get_narayana_dhasa(dob, tob, place)
-    print('narayana',db)
-    """
-    db = a._get_naryana_dhasa(dob, tob, place)
-    print('narayana',db)
-    db = a._get_kendraadhi_dhasa(dob, tob, place)
-    print('kendraadhi rasi',db)
-    db = a._get_sudasa_dhasa(dob,tob,place)
-    print('sudasa',db)
-    db = a._get_drig_dhasa(dob,tob,place)
-    print('drig',db)
-    db = a._get_varsha_naryana_dhasa(dob, tob, place, years=1)
-    print('varsha narayana',db)
-    ba, ga = a._get_arudha_padhas(dob,tob,place,divisional_chart_factor=1)
-    print(ba)
-    print(ga)
-    """
+    sd = a._get_yogini_dhasa_bhukthi(dob, tob, place)
+    dhasa_periods = []
+    for row in sd:
+        lords = row[0].split("-")
+        date_str=row[1]
+        dhasa_date = utils.date_time_string_to_date_time_tuple(date_str)
+        db = [(lords),dhasa_date]
+        dhasa_periods.append((lords,dhasa_date))
+    from datetime import datetime
+    current_date_str,current_time_str = datetime.now().strftime('%Y,%m,%d;%H:%M:%S').split(';')
+    y,m,d = map(int,current_date_str.split(','))
+    hh,mm,ss = map(int,current_time_str.split(':'))
+    current_date_jd = utils.julian_day_number(drik.Date(y,m,d),(hh,mm,ss))
+    vdc = utils.get_running_dhasa_for_given_date(current_date_jd, dhasa_periods)
+    print(vdc)
     exit()

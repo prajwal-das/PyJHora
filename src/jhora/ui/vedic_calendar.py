@@ -1,5 +1,5 @@
 import sys, os
-import datetime
+from datetime import datetime
 from PyQt6.QtWidgets import (QApplication, QWidget, QGridLayout, QPushButton, QCompleter, QMessageBox,
                             QLineEdit, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QDialog, QToolTip)
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QPoint, pyqtSlot, QSize
@@ -237,7 +237,7 @@ class VedicCalendar(QWidget):
         main_layout = QVBoxLayout()
         input_layout = QHBoxLayout()
         if self.start_date is None:
-            current_date_str = datetime.datetime.now().strftime('%Y,%m,%d')
+            current_date_str = datetime.now().strftime('%Y,%m,%d')
         else:
             year,month,day = self.start_date
             current_date_str = str(year)+','+str(month)+','+str(day)
@@ -478,10 +478,10 @@ class VedicCalendar(QWidget):
             _naks = drik.nakshatra(jd, place); _nak_id = _naks[0]
             _nak = utils.NAKSHATRA_SHORT_LIST[_nak_id-1]
             _lang = const.available_languages[self._language]
-            tm = None; td = None; adhik_maasa = None; _vaara = drik.vaara(jd)+1
+            tm = None; td = None; adhik_maasa = None; _vaara = drik.vaara(jd,place)+1
             if self._use_purnimanta_system is None:
                 tm,td = drik.tamil_solar_month_and_date(date_in, place)
-                spl_month_text = utils.MONTH_LIST[tm]+' '+str(td)
+                spl_month_text = utils.MONTH_LIST[tm]+' '+str(td)+ ' ('+self.res['solar_str']+')'
                 _samvatsara = drik.samvatsara(date_in, place, zodiac=0)
                 year_str = utils.YEAR_LIST[_samvatsara]
             else:
@@ -495,7 +495,8 @@ class VedicCalendar(QWidget):
                 nija_month_str = ''
                 if nija_maasa:
                     nija_month_str = self.res['nija_month_str']
-                spl_month_text = utils.MONTH_LIST[tm]+' '+ adhik_maasa_str+nija_month_str+' '+str(td)
+                _lmonth_str= ' ('+self.res['purnimantha_str']+')' if self._use_purnimanta_system else  ' ('+self.res['amantha_str']+')'
+                spl_month_text = utils.MONTH_LIST[tm]+' '+ adhik_maasa_str+nija_month_str+' '+str(td)+_lmonth_str
                 year_str = utils.YEAR_LIST[_lunar_year]
         calendar_type = 0 if self._use_purnimanta_system==None else (2 if self._use_purnimanta_system else 1)
         _festival_list = vratha.get_festivals_of_the_day(jd,place)
@@ -533,7 +534,7 @@ class VedicCalendar(QWidget):
             'top_right': (_sunrise_icon, _srise, self.res['sunrise_str']+' '+str(_srise)),
             'bottom_right': (_sunset_icon, _sset, self.res['sunset_str']+' '+str(_sset))
         }
-        header_text = year_str+' '+str(y)+' '+ utils.MONTH_LIST_EN[m-1]+' '+str(d)+' '+utils.DAYS_LIST[drik.vaara(jd)]+' '+\
+        header_text = year_str+' '+str(y)+' '+ utils.MONTH_LIST_EN[m-1]+' '+str(d)+' '+utils.DAYS_LIST[drik.vaara(jd,place)]+' '+\
                       spl_month_text+' '+ utils.PAKSHA_LIST[_paksha]+' ' + \
                       utils.TITHI_LIST[_tit-1]
         return _panchanga_dict, header_text
@@ -589,7 +590,7 @@ class VedicCalendar(QWidget):
                 next_month_start = utils.next_panchanga_day(last_day, add_days=1)
                 last_day = last_day.day
             _jd -= 1; current_date = previous_month_end
-            start_day = drik.vaara(_jd)
+            start_day = drik.vaara(_jd,self.start_place)
             reached_end_of_month = False
             [self.cells[row][col].setVisible(False) for col in range(7) for row in range(7)]
             for row in range(7):
@@ -601,7 +602,10 @@ class VedicCalendar(QWidget):
                     if row * 7 + col >= start_day:
                         _year,_month,_day,_ = utils.jd_to_gregorian(_jd)
                         sunrise_hours = drik.sunrise(_jd,self.start_place)[0]
-                        _jd = utils.julian_day_number((_year, _month, _day), (sunrise_hours, 0, 0))
+                        _,current_time_str = datetime.now().strftime('%Y,%m,%d;%H:%M:%S').split(';')
+                        hh,mm,ss = current_time_str.split(":")
+                        _jd = utils.julian_day_number((_year, _month, _day), (int(hh), int(mm), int(ss)))
+                        #_jd = utils.julian_day_number((_year, _month, _day), (sunrise_hours+0.1, 0, 0))
                         self.jd[row][col]=_jd; self.row_max = row
                         cell.setVisible(True)
                         panchanga_dict,_ = self._get_days_panchanga_info(row,col)

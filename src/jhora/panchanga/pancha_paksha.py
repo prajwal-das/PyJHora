@@ -124,7 +124,7 @@ def construct_pancha_pakshi_information(dob=None,tob=None,place=None,nakshathra_
     if jd < sunrise_jd:
         jd -= 1
         sunrise_jd = drik.sunrise(jd, place)[-1]
-    weekday_index = drik.vaara(jd)+1
+    weekday_index = drik.vaara(jd,place)+1
     paksha_index = pancha_paksha._get_paksha(jd, place)
     day_length = drik.day_length(jd, place)
     night_length = drik.night_length(jd, place)
@@ -203,5 +203,5 @@ if __name__ == "__main__":
     bs = _get_birth_nakshathra(jd, place)
     paksha_index = _get_paksha(jd, place)
     bird_index = _get_birth_bird_from_nakshathra(bs,paksha_index)
-    weekday_index = drik.vaara(jd)+1
+    weekday_index = drik.vaara(jd,place)+1
     print('bird',bird_index,utils.resource_strings[pancha_pakshi_birds[bird_index-1]+'_str'])

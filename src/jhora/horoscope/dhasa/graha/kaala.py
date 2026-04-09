@@ -40,19 +40,19 @@ def _dhasa_progression_and_periods(jd,place):
     tonight_start = today_sunset_time+nf2; tonight_end = tomorrow_sunrise_time-nf2
     # Night is before dawn_start and after dusk_end
     if birth_time > dawn_start and birth_time < dawn_end: # dawn
-        kaala_type = 0 # 'Dawn'
+        kaala_type = const.KAALA_TYPE.DAWN # 'Dawn'
         kaala_frac = (birth_time-dawn_start)/(dawn_end-dawn_start)
     elif birth_time > dusk_start and birth_time < dusk_end: # dusk
-        kaala_type = 2 # 'Dusk'
+        kaala_type = const.KAALA_TYPE.DUSK # 'Dusk'
         kaala_frac = (birth_time-dusk_start)/(dusk_end-dusk_start)
     elif birth_time > day_start and birth_time < day_end: # Day
-        kaala_type = 1 # 'Day'
+        kaala_type = const.KAALA_TYPE.DAY # 'Day'
         kaala_frac = (birth_time-day_start)/(day_end-day_start)
     elif birth_time > yday_night_start and birth_time < yday_night_end: # yday-night
-        kaala_type = 3 # 'YDay-Night'
+        kaala_type = const.KAALA_TYPE.NIGHT # 'YDay-Night'
         kaala_frac = (birth_time-yday_night_start)/(yday_night_end-yday_night_start)
     elif birth_time > tonight_start and birth_time < tonight_end: # yday-night
-        kaala_type = 3 # 'ToNight'
+        kaala_type = const.KAALA_TYPE.NIGHT # 'ToNight'
         kaala_frac = (birth_time-tonight_start)/(tonight_end-tonight_start)
     _kaala_dhasa_life_span_first_cycle = _kaala_dhasa_life_span*kaala_frac
     _dhasas1 = [(p+1)*_kaala_dhasa_life_span_first_cycle/45.0 for p in range(9)]
@@ -60,8 +60,6 @@ def _dhasa_progression_and_periods(jd,place):
     _kaala_dhasa_life_span_second_cycle = _kaala_dhasa_life_span - _kaala_dhasa_life_span_first_cycle
     _dhasas2 = [(p+1)*_kaala_dhasa_life_span_second_cycle/45.0 for p in range(9)]
     return kaala_type, kaala_frac,_dhasas1,_dhasas2
-
-
 def get_dhasa_antardhasa(
     dob, tob, place,
     years=1, months=1, sixty_hours=1,
@@ -84,7 +82,7 @@ def get_dhasa_antardhasa(
             4 = + Sookshma
             5 = + Prana
             6 = + Deha-antara
-        @param round_duration: If True, round returned durations to const.DHASA_DURATION_ROUNDING_TO
+        @param round_duration: If True, round returned durations to dhasa_level_index
 
         @return:
             kaala_type, dhasa_info
@@ -148,15 +146,15 @@ def get_dhasa_antardhasa(
         else:
             # Leaf rows: round only for return (if requested); keep full precision for time accumulation
             for blord, child_start_jd, child_dur in children:
-                durn = round(child_dur, const.DHASA_DURATION_ROUNDING_TO) if round_duration else child_dur
-                dhasa_info.append(prefix + (blord, utils.julian_day_to_date_time_string(child_start_jd), durn))
+                durn = round(child_dur, dhasa_level_index+1) if round_duration else child_dur
+                dhasa_info.append((prefix + (blord,), utils.jd_to_gregorian(child_start_jd), durn))
 
     # First Cycle
     for dhasa_lord in range(9):
         maha_dur_unrounded = dhasas_first[dhasa_lord]  # full precision for calcs
         if dhasa_level_index == 1:
-            durn = round(maha_dur_unrounded, const.DHASA_DURATION_ROUNDING_TO) if round_duration else maha_dur_unrounded
-            dhasa_info.append((dhasa_lord, utils.julian_day_to_date_time_string(start_jd), durn))
+            durn = round(maha_dur_unrounded, dhasa_level_index+1) if round_duration else maha_dur_unrounded
+            dhasa_info.append(((dhasa_lord,), utils.jd_to_gregorian(start_jd), durn))
             start_jd += maha_dur_unrounded * year_duration
         else:
             _recurse(level=2, parent_start_jd=start_jd, parent_duration_years=maha_dur_unrounded, prefix=(dhasa_lord,))
@@ -166,16 +164,272 @@ def get_dhasa_antardhasa(
     for dhasa_lord in range(9):
         maha_dur_unrounded = dhasas_second[dhasa_lord]
         if dhasa_level_index == 1:
-            durn = round(maha_dur_unrounded, const.DHASA_DURATION_ROUNDING_TO) if round_duration else maha_dur_unrounded
-            dhasa_info.append((dhasa_lord, utils.julian_day_to_date_time_string(start_jd), durn))
+            durn = round(maha_dur_unrounded, dhasa_level_index+1) if round_duration else maha_dur_unrounded
+            dhasa_info.append(((dhasa_lord,), utils.jd_to_gregorian(start_jd), durn))
             start_jd += maha_dur_unrounded * year_duration
         else:
             _recurse(level=2, parent_start_jd=start_jd, parent_duration_years=maha_dur_unrounded, prefix=(dhasa_lord,))
             start_jd += maha_dur_unrounded * year_duration
 
     return kaala_type, dhasa_info
+def kaala_immediate_children(
+    parent_lords,
+    parent_start,                # (Y, M, D, fractional_hour)
+    parent_duration=None,        # float years (optional)
+    parent_end=None,             # (Y, M, D, fractional_hour) (optional)
+    *,
+    jd_at_dob,
+    place,
+    years: int = 1,
+    months: int = 1,
+    sixty_hours: int = 1,
+    **kwargs
+):
+    """
+    Kāla Daśā — return ONLY the immediate (p -> p+1) children under the given parent span.
+
+    Rules (matches get_dhasa_antardhasa):
+      • Children are formed by a TWO-PHASE split using kaala_frac:
+            Phase A  = kaala_frac * parent
+            Phase B  = (1 - kaala_frac) * parent
+        Each phase is subdivided by weights 1..9 (sum=45), producing 9 children per phase,
+        i.e., 18 immediate children total at each level.
+      • Child labels (bhukthi_lord) are 0..8 in order for phase A, then again 0..8 for phase B
+        (exactly like your _children_two_phase).
+
+    Output rows:
+      [ (lords_tuple_with_child), child_start_tuple, child_end_tuple ]
+    """
+    # ---- normalize lords path
+    if isinstance(parent_lords, int):
+        path = (parent_lords,)
+    elif isinstance(parent_lords, (list, tuple)) and parent_lords:
+        path = tuple(parent_lords)
+    else:
+        raise ValueError("parent_lords must be int or non-empty tuple/list of ints")
+
+    # ---- canonical tuple <-> JD
+    def _tuple_to_jd(t):
+        y, m, d, fh = t
+        return utils.julian_day_number(drik.Date(y, m, d), (fh, 0, 0))
+
+    def _jd_to_tuple(jd_val):
+        return utils.jd_to_gregorian(jd_val)
+
+    # ---- parent span
+    start_jd = _tuple_to_jd(parent_start)
+    if (parent_duration is None) == (parent_end is None):
+        raise ValueError("Provide exactly one of parent_duration (years) or parent_end (tuple).")
+
+    if parent_end is None:
+        parent_years = float(parent_duration)
+        end_jd = start_jd + parent_years * const.sidereal_year
+    else:
+        end_jd = _tuple_to_jd(parent_end)
+        parent_years = (end_jd - start_jd) / const.sidereal_year
+
+    if end_jd <= start_jd:
+        return []  # instantaneous parent → nothing to tile
+
+    # ---- compute the yearly anchor and Kaala parameters
+    # Same as in your base: anchor on "yearly" chart from DOB, then get kaala params
+    jd_years = drik.next_solar_date(jd_at_dob, place, years=years, months=months, sixty_hours=sixty_hours)
+    kaala_type, kaala_frac, _dhasas_first, _dhasas_second = _dhasa_progression_and_periods(jd_years, place)
+    # (We only need kaala_frac to subdivide the immediate parent.)
+
+    # ---- two-phase subdivision at this immediate level
+    weights = list(range(1, 10))  # 1..9
+    W = 45.0
+
+    phaseA_years = kaala_frac * parent_years
+    phaseB_years = (1.0 - kaala_frac) * parent_years
+
+    # Build (label, duration_years) pairs in sequence: phase A then phase B
+    segments = []
+    for blord, w in enumerate(weights):   # Phase A
+        segments.append((blord, phaseA_years * (w / W)))
+    for blord, w in enumerate(weights):   # Phase B
+        segments.append((blord, phaseB_years * (w / W)))
+
+    # ---- tile children within parent [start, end)
+    children = []
+    cursor = start_jd
+    for idx, (blord, dur_y) in enumerate(segments):
+        if idx == len(segments) - 1:
+            child_end = end_jd
+        else:
+            child_end = cursor + dur_y * const.sidereal_year
+        children.append([
+            path + (blord,),
+            _jd_to_tuple(cursor),
+            _jd_to_tuple(child_end),
+        ])
+        cursor = child_end
+        if cursor >= end_jd:
+            break
+
+    if children:
+        children[-1][2] = _jd_to_tuple(end_jd)
+
+    return children
+def get_running_dhasa_for_given_date(
+    current_jd,
+    jd_at_dob,
+    place,
+    dhasa_level_index=const.MAHA_DHASA_DEPTH.DEHA,
+    *,
+    years: int = 1,
+    months: int = 1,
+    sixty_hours: int = 1,
+    round_duration: bool = False,     # runner uses exact start/end; leave unrounded
+    **kwargs
+):
+    """
+    Kāla Daśā — narrow Mahā -> … -> target level and return the full running ladder:
+
+      [
+        [(l1,),              start1, end1],            # Mahā
+        [(l1,l2),            start2, end2],            # Antara
+        [(l1,l2,l3),         start3, end3],            # Pratyantara
+        [(l1,l2,l3,l4),      start4, end4],            # Sūkṣma
+        [(l1,l2,l3,l4,l5),   start5, end5],            # Prāṇa
+        [(l1,l2,l3,l4,l5,l6),start6, end6],            # Dehā
+      ]
+    """
+
+    # ---- depth normalization (Enum-friendly)
+    def _normalize_depth(depth_val):
+        try:
+            depth = int(depth_val)
+        except Exception:
+            depth = int(const.MAHA_DHASA_DEPTH.DEHA)
+        lo = int(const.MAHA_DHASA_DEPTH.MAHA_DHASA_ONLY)
+        hi = int(const.MAHA_DHASA_DEPTH.DEHA)
+        return min(hi, max(lo, depth))
+
+    target_depth = _normalize_depth(dhasa_level_index)
+
+    # ---- tuple <-> JD helpers
+    def _tuple_to_jd(t):
+        y, m, d, fh = t
+        return utils.julian_day_number(drik.Date(y, m, d), (fh, 0, 0))
+
+    def _is_zero_length(s, e, eps_seconds=1.0):
+        return (_tuple_to_jd(e) - _tuple_to_jd(s)) * 86400.0 <= eps_seconds
+
+    def _to_utils_periods(children_rows, parent_end_tuple, eps_seconds=1.0):
+        """
+        children_rows: [ [lords_tuple, start_tuple, end_tuple], ... ]
+        Returns: list of (lords_tuple, start_tuple) + sentinel (any_lords, parent_end_tuple),
+        filtering zero-length rows and enforcing strictly increasing starts for utils.
+        """
+        # filter zero-length
+        filtered = [r for r in children_rows if not _is_zero_length(r[1], r[2], eps_seconds=eps_seconds)]
+        if not filtered:
+            return []
+        filtered.sort(key=lambda r: _tuple_to_jd(r[1]))
+        proj, prev = [], None
+        for lords, st, _en in filtered:
+            sjd = _tuple_to_jd(st)
+            if prev is None or sjd > prev:
+                proj.append((lords, st)); prev = sjd
+        # sentinel
+        proj.append((proj[-1][0], parent_end_tuple))
+        return proj
+
+    def _as_tuple_lords(x):
+        return (x,) if isinstance(x, int) else tuple(x)
+
+    # ---- derive dob/tob (base function needs them)
+    y, m, d, fh = utils.jd_to_gregorian(jd_at_dob)
+    dob = drik.Date(y, m, d)
+    tob = (fh, 0, 0)
+
+    running_all = []
+
+    # ---- Level 1: Mahā via your base function
+    kaala_type, maha_rows = get_dhasa_antardhasa(
+        dob, tob, place,
+        years=years,
+        months=months,
+        sixty_hours=sixty_hours,
+        dhasa_level_index=const.MAHA_DHASA_DEPTH.MAHA_DHASA_ONLY,
+        round_duration=False,
+    )
+    # normalize for utils: (lords_tuple, start_tuple)
+    maha_for_utils = []
+    for row in maha_rows:
+        # row: ((lord,), start_tuple, duration_years)
+        lords_any, start_t = row[0], row[1]
+        maha_for_utils.append((_as_tuple_lords(lords_any), start_t))
+
+    # select running Mahā
+    rd1 = utils.get_running_dhasa_for_given_date(current_jd, maha_for_utils)
+    lords1 = _as_tuple_lords(rd1[0])
+    running = [lords1, rd1[1], rd1[2]]
+    running_all.append(running)
+
+    if target_depth == int(const.MAHA_DHASA_DEPTH.MAHA_DHASA_ONLY):
+        return running_all
+
+    # ---- Levels 2..target
+    for depth in range(2, target_depth + 1):
+        parent_lords, parent_start, parent_end = running
+
+        # Expand only this parent via the 2-phase (weights 1..9 each) rule
+        children = kaala_immediate_children(
+            parent_lords=parent_lords,
+            parent_start=parent_start,
+            parent_end=parent_end,
+            jd_at_dob=jd_at_dob,
+            place=place,
+            years=years,
+            months=months,
+            sixty_hours=sixty_hours,
+        )
+
+        if not children:
+            # represent as zero-length at parent_end
+            running = [parent_lords + (parent_lords[-1],), parent_end, parent_end]
+            running_all.append(running)
+            continue
+
+        # utils selection with sentinel & strictly increasing starts
+        periods_for_utils = _to_utils_periods(children, parent_end_tuple=parent_end)
+        if not periods_for_utils:
+            # all zero-length → boundary selection
+            last = children[-1]
+            running = [last[0], last[1], last[1]]
+        else:
+            rdk = utils.get_running_dhasa_for_given_date(current_jd, periods_for_utils)
+            lords_k = _as_tuple_lords(rdk[0])
+            running = [lords_k, rdk[1], rdk[2]]
+
+        running_all.append(running)
+
+    return running_all
 
 if __name__ == "__main__":
+    utils.set_language('en')
+    dob = drik.Date(1996,12,7); tob = (10,34,0)
+    place = drik.Place('Chennai,IN', 13.0389, 80.2619, +5.5)    
+    jd_at_dob  = utils.julian_day_number(dob, tob)
+    from datetime import datetime
+    current_date_str,current_time_str = datetime.now().strftime('%Y,%m,%d;%H:%M:%S').split(';')
+    y,m,d = map(int,current_date_str.split(','))
+    hh,mm,ss = map(int,current_time_str.split(':')); fh = hh+mm/60+ss/3600
+    print(utils.date_time_tuple_to_date_time_string(y, m, d, fh))
+    current_jd = utils.julian_day_number(drik.Date(y,m,d),(hh,mm,ss))
+    import time
+    start_time = time.time()
+    print("Dehā        :", get_running_dhasa_for_given_date(current_jd, jd_at_dob, place, dhasa_level_index=6))
+    print('new method elapsed time',time.time()-start_time)
+    start_time = time.time()
+    _,ad = get_dhasa_antardhasa(dob,tob, place,dhasa_level_index=const.MAHA_DHASA_DEPTH.DEHA)
+    print(utils.get_running_dhasa_at_all_levels_for_given_date(current_jd, ad,const.MAHA_DHASA_DEPTH.DEHA,
+                                                               extract_running_period_for_all_levels=True))
+    print('old method elapsed time',time.time()-start_time)
+    exit()
     from jhora.tests import pvr_tests
     pvr_tests._STOP_IF_ANY_TEST_FAILED = True
     pvr_tests.kaala_test()

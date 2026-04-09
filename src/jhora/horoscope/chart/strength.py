@@ -553,7 +553,7 @@ def _abdadhipathi(jd,place):
     return abp
 def _abda_bala(jd,place):
     abp = [0 for _ in const.SUN_TO_SATURN]
-    day = drik.vaara(jd)
+    day = drik.vaara(jd,place)
     abp[day] = 15
     return abp
 def _masadhipathi(jd,place):
@@ -568,7 +568,7 @@ def _masadhipathi(jd,place):
     return abp
 def _masa_bala(jd,place):
     abp = [0 for _ in const.SUN_TO_SATURN]
-    day = drik.vaara(jd)
+    day = drik.vaara(jd,place)
     abp[day] = 30
     return abp
 def _vaaradhipathi(jd,place):
@@ -585,7 +585,7 @@ def _vaaradhipathi(jd,place):
     return abp
 def _vaara_bala(jd,place):
     abp = [0 for _ in const.SUN_TO_SATURN]
-    day = drik.vaara(jd)
+    day = drik.vaara(jd,place)
     _,_,_,tobh = utils.jd_to_gregorian(jd)
     srise = drik.sunrise(jd, place)[0]
     if tobh < srise:
@@ -594,7 +594,7 @@ def _vaara_bala(jd,place):
     return abp
 def _hora_bala(jd,place):
     abp = [0 for _ in const.SUN_TO_SATURN]
-    day = drik.vaara(jd)
+    day = drik._vaara(jd)
     _,_,_,tobh = utils.jd_to_gregorian(jd)
     srise = drik.sunrise(jd, place)[0]
     if tobh < srise:
@@ -818,23 +818,23 @@ def planet_aspect_relationship_table_pvr(
     Parameters
     ----------
     planet_positions : list-like
-        Your standard PyJHora "positions" where index 0 is lagna and 1.. are Sun..Ketu.
+        PyJHora "positions" where index 0 is lagna and 1.. are Sun..Ketu.
     include_houses : bool
         Include 12 house rows (Bhava Chalit) using chosen house system/cusps.
     normalize_as_percentage : bool
         If True, output in %, otherwise virupas (0..60).
     jd, place :
         Required if include_houses=True AND you want real cusps from charts.bhava_chart.
-        If not provided, falls back to equal-house (Asc + same degree) like your legacy code.
+        If not provided, falls back to equal-house (Asc + same degree)
     bhava_madhya_method :
-        One of your supported house systems. If None, defaults to const.bhaava_madhya_method.
+        One of supported house systems. If None, defaults to const.bhaava_madhya_method.
         For JHora parity choose the same system (e.g., Sripati/Porphyry or KP/Placidus). [2](https://saravali.github.io/astrology/drishti.html)[3](https://jyotishvidya.com/ch27.htm)
     use_round_half_up : bool
         If True, percent rounding is half-up (recommended to match JHora UI). [4](https://varahamihira.blogspot.com/2004/07/strength-of-planets-shadbala-i.html)
     """
     import numpy as np
 
-    # planets array without ascendant (matches your original pp semantics)
+    # planets array without ascendant
     pp = planet_positions[1:const._pp_count_upto_ketu]
     n_planets = len(const.SUN_TO_KETU)
     rows = 21 if include_houses else 9
@@ -895,7 +895,7 @@ def __drik_bala_calc_1_pvr(a_deg, aspecting_id, aspected_id, _DEBUG_=False):
     Parāśari sphuṭa graha dṛṣṭi in virūpas (0..60), per BPHS Chapter 26.
     a_deg : directed angle (0..360) from aspecting -> aspected.
     aspecting_id : planet id (const.*_ID), used for special aspects.
-    aspected_id  : not used in math (kept for logging parity with your signature).
+    aspected_id  : not used in math
     References: BPHS Ch.26; standard tabulations of the same piecewise rules. [1](https://github.com/naturalstupid/PyJHora/blob/main/README.md)[5](https://www.dirah.org/shadbala.htm)
     """
     a = a_deg

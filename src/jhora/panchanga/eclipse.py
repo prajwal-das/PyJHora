@@ -115,7 +115,7 @@ def next_solar_eclipse(
         if show_maximum_eclipse_global_location = False (Default)
             @return eclipse_type, [eclipse_begin_jd,eclipse_max_jd,eclipse_end_jd]
         if show_maximum_eclipse_global_location = True  Only for GLOBAL option
-            @return eclipse_type, [eclipse_begin_jd,eclipse_max_jd,eclipse_end_jd],(Max_ecl_longitude,Max_ecl_latitude)
+            @return eclipse_type, [eclipse_begin_jd,eclipse_max_jd,eclipse_end_jd],(Max_ecl_latitude,Max_ecl_longitude)
         NOTE: Max_ecl_longitude and latitude - may be in middle of a sea or inhabitant places
             You can use reverse_geocode or reverse_geocoder to find the nearest habitant place
         eclipse_type = "hybrid", "total", "annular", "partial"
@@ -147,7 +147,9 @@ def next_solar_eclipse(
             print("Unable to find maximum eclipse location")
             return results
         else:
-            return results,(geopos[:2])
+            #import reverse_geocode
+            #print(reverse_geocode.get((geopos[1],geopos[0])))
+            return [results,(geopos[1],geopos[0])] # latitude,longitude because swiss ephimeris return long,lat
     return results
 def next_lunar_eclipse(
     jd_local: float,
@@ -170,7 +172,7 @@ def next_lunar_eclipse(
         if show_maximum_eclipse_global_location = False (Default)
             @return eclipse_type, [eclipse_begin_jd,eclipse_max_jd,eclipse_end_jd]
         if show_maximum_eclipse_global_location = True  Only for GLOBAL option
-            @return eclipse_type, [eclipse_begin_jd,eclipse_max_jd,eclipse_end_jd],(Max_ecl_longitude,Max_ecl_latitude)
+            @return eclipse_type, [eclipse_begin_jd,eclipse_max_jd,eclipse_end_jd],(Max_ecl_latitude,Max_ecl_longitude)
         NOTE: Max_ecl_longitude and latitude - may be in middle of a sea or inhabitant places
             You can use reverse_geocode or reverse_geocoder to find the nearest habitant place
         eclipse_type = "hybrid", "total", "penumbral", "partial"
@@ -206,14 +208,16 @@ def next_lunar_eclipse(
             print("Unable to find maximum eclipse location")
             return results
         else:
-            return results,(geopos[:2])
+            #import reverse_geocode
+            #print(reverse_geocode.get((geopos[1],geopos[0])))
+            return [results,(geopos[1],geopos[0])] # latitude,longitude because swiss ephimeris return long,lat
     return results
 # ---------- Example usage ----------
 if __name__ == "__main__":
     utils.set_language('en')
     from jhora import const
     const.use_24hour_format_in_to_dms = False
-    dob = drik.Date(1996, 12, 7)
+    dob = drik.Date(2026, 1, 1)
     tob = (10, 34, 0)
     place = drik.Place('Chennai,India', 13.03862, 80.261818, 5.5)  # timezone=+5.5
     jd_local = utils.julian_day_number(dob, tob)
@@ -236,7 +240,7 @@ if __name__ == "__main__":
     if l_loc: print('Lunar (Local, TOTAL):', ecl_str,[(y,m,d,utils.to_dms(fh)) for y,m,d,fh in l_loc[1]])
     # Global lunar, ANY (includes penumbral)
     l_glob,geopos = next_lunar_eclipse(jd_local,place,eclipse_location_type=EclipseLocation.GLOBAL,
-                                    lunar_eclipse_type=LunarEclipseType.PARTIAL,search_backward=backward_search,
+                                    lunar_eclipse_type=LunarEclipseType.TOTAL,search_backward=backward_search,
                                     show_maximum_eclipse_global_location=True)
     ecl_str = utils.resource_strings[l_glob[0]+'_str']+' '+utils.resource_strings['lunar_str']+' '+ utils.resource_strings['eclipse_str']
     if l_glob: print('Lunar (Global, Partial):', ecl_str,[(y,m,d,utils.to_dms(fh)) for y,m,d,fh in l_glob[1]],geopos)

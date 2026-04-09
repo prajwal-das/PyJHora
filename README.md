@@ -1,4 +1,4 @@
-JHora 4.7.0
+JHora 4.8.0
 =================
 Python package containing almost all the features described in the book
 
@@ -99,6 +99,23 @@ Click Show Chart to display the birth (Raasi and Navamsam) charts (every time an
 
 Click Show PDF to save the screen as a PDF file
 
+Changes since 4.7.0
+===================
+* MAJOR CHANGE: NOTE: ALL DHASA NOW RETURN IN THE FORMAT: [ [(LORDS), DHASA_START, DURATION]...]. DHASA_START IS NO LONGER A DATE STRING (1997-01-01 13:04:50 AM) BUT DATE TUPLE (Y,M,D,FH).
+* Added `jhora.horoscope.dhasa.graha.rashmi` Rashmi Dhasa Bhukthi. It provides 3 methods based on order dhasa progression: 1=Highest Ray (BPHS), 2=Natural (Naisargika Sun to Saturn order), 3=Vimshottari Order (you can choose seed star as well).
+* Added `jhora.horoscope.dhasa.raasi.raashiyanka` dhasa. It provides 2 methods: 1=BPHS (Tara Chand Shastri), 2=BPHS (Ganesh Dutt Pathak).
+* Added `jhora.horoscope.dhasa.graha.ashtaka_varga` and ``jhora.horoscope.dhasa.raasi.ashtaka_varga` as both graha and raasi dhasa based on 2 references: 
+[AstroSutras using BAV](https://astrosutras.in/index.php/2025/03/04/ashtakavarga-dasha-system/) and 
+[Astronidan using SAV](https://astronidan.com/dashas/ashtakavarga-dasha).
+Since I could not find algorithmic details I have used CoPilot to calculate this dhasa. Provided combinations of choosing BAV,SAV or shodhaya Pindas to decide dhasa lords, start_rule using strength,user defined planet/zodiac, dhasa order using strength or zodiacal etc. This is an experimental dhasa since I dont know real algorithm. Let me know if there are any concrete algorithm for this.
+* Added `jhora.horoscope.dhasa.panchasvara` and `jhora.horoscope.dhasa.sudharsana_chakra` dhasa
+* Added `jhora.horoscope.dhasa.raasi.chathuvidha_utthara` dhasa with four methods (Lagna, Kendra, Trikona and Dasha).
+* Eclipse module has been updated. Option given to show maximum eclipse location. Requires `import reverse_geocode`.
+* Added Nakshathra Dhasa Progression to graha dhasas as `nakshathra_dhasa_progression`. Also added an argument `dhasa_progression_correction` to every planet, subplanet, special lagna calculations. Added this as an option in the `horo_chart_tabs` UI. 
+* Added `utils.get_running_dhasa_at_all_levels_for_given_date` function to get running dhasa for given julian day number and dhasa_periods (obtained from any dhasa calculations at DEHA Level). Added this as right click menu on the dhasa bhukthi tab of `horo_chart_tabs` UI.
+* Added `house.order_of_raasis_by_strength` function. 
+* removed global variables _ayanamsa_mode and _ayanamsa_value and set_ayanamsa_mode and reset_ayanamsa_mode that were repeatedly called were also removed - as requested by a user.
+* few minor fixes to yoga.py
 
 Changes since 4.6.0
 ===================

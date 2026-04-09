@@ -455,7 +455,7 @@ if __name__ == "__main__":
     bs = pancha_paksha._get_birth_nakshathra(jd, place)
     paksha_index = pancha_paksha._get_paksha(jd, place)
     bird_index = pancha_paksha._get_birth_bird_from_nakshathra(bs,paksha_index)
-    weekday_index = drik.vaara(jd)+1
+    weekday_index = drik.vaara(jd,place)+1
     print('bird',bird_index,utils.resource_strings[pancha_pakshi_birds[bird_index-1]+'_str'])
     dt = datetime.now().timetuple()
     dob = dt[0:3]; tob=dt[3:6]
