@@ -1627,7 +1627,7 @@ def _dhasavarga(jd, place,divisional_chart_factor=1):
         divisional_chart = dasavarga_from_long(nirayana_long,divisional_chart_factor)
         positions.append([p_id, divisional_chart])
     return positions
-def dhasavarga(jd, place,divisional_chart_factor=1,set_rahu_ketu_as_true_nodes=True,include_western_planets=None,
+def dhasavarga(jd, place,divisional_chart_factor=1,set_rahu_ketu_as_true_nodes=None,include_western_planets=None,
                dhasa_progression_correction=0.0):
     """
         Calculate planet positions for a given divisional chart index
@@ -3592,7 +3592,7 @@ def is_night_birth(jd, place):
     sunrise_hours = sunrise(jd, place)[0]
     sunset_hours  = sunset(jd, place)[0]
     return (birth_hours >= sunset_hours) or (birth_hours < sunrise_hours)
-def set_planet_list(set_rahu_ketu_as_true_nodes=True,
+def set_planet_list(set_rahu_ketu_as_true_nodes=None,
                     include_western_planets=False):
     """
         @param set_rahu_ketu_as_true_nodes:

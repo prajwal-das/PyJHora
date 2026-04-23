@@ -26,9 +26,34 @@ from collections import OrderedDict as Dict
 from jhora import const, utils
 from jhora.panchanga import drik
 from jhora.horoscope.chart import charts
+import swisseph as swe
 
-year_duration = const.sidereal_year  # const.tropical_year  # some say 360 days, others 365.25 or 365.2563 etc
+year_duration = const.sidereal_year  # fallback for non-solar-return paths
 one_star = (360 / 27.0)  # 27 nakshatras span 360°
+
+def _sun_sid_long(jd_utc):
+    """Sidereal Sun longitude at given UTC JD."""
+    return swe.calc_ut(jd_utc, swe.SUN, swe.FLG_SWIEPH | swe.FLG_SIDEREAL)[0][0]
+
+def _find_sun_return(jd_start, n_years, place_tz=5.5):
+    """Find JD (local) when Sun has traversed n_years * 360° from start.
+    jd_start is local JD; internally converts to UTC for ephemeris."""
+    jd_utc = jd_start - place_tz / 24.0
+    sun_start = _sun_sid_long(jd_utc)
+    target = (sun_start + n_years * 360) % 360
+    jd_est = jd_start + n_years * 365.2564
+    jd_lo, jd_hi = jd_est - 2, jd_est + 2
+    for _ in range(60):
+        jd_mid = (jd_lo + jd_hi) / 2
+        sun_now = _sun_sid_long(jd_mid - place_tz / 24.0)
+        diff = (sun_now - target + 180) % 360 - 180
+        if diff < 0:
+            jd_lo = jd_mid
+        else:
+            jd_hi = jd_mid
+        if abs(jd_hi - jd_lo) < 0.000001 / 86400:
+            break
+    return (jd_lo + jd_hi) / 2
 
 vimsottari_adhipati = (
     lambda nak, seed_star=3: const.vimsottari_adhipati_list[
@@ -69,17 +94,18 @@ def vimsottari_dasha_start_date(
     lord = vimsottari_adhipati(nak, seed_star)  # ruler of current nakshatra
     period = vimsottari_dict[lord]              # total years of nakshatra lord
 
-    period_elapsed = rem / one_star * period  # years
-    period_elapsed *= year_duration           # days
-    start_date = jd - period_elapsed          # so many days before current day
+    period_elapsed = rem / one_star * period  # years elapsed (fractional)
+    # Use solar return: find JD when Sun traversed period_elapsed years backward
+    tz = place.timezone if hasattr(place, 'timezone') else 5.5
+    start_date = _find_sun_return(jd, -period_elapsed, tz)
     return [lord, start_date]
 
 
 def vimsottari_mahadasa(
     jd, place, divisional_chart_factor=1, chart_method=1, star_position_from_moon=1, seed_star=3, dhasa_starting_planet=1
 ):
-    """List all mahadashas and their start dates"""
-    lord, start_date = vimsottari_dasha_start_date(
+    """List all mahadashas and their start dates using cumulative solar return"""
+    lord, md_start = vimsottari_dasha_start_date(
         jd, place,
         divisional_chart_factor=divisional_chart_factor,
         chart_method=chart_method,
@@ -87,10 +113,12 @@ def vimsottari_mahadasa(
         seed_star=seed_star,
         dhasa_starting_planet=dhasa_starting_planet
     )
+    tz = place.timezone if hasattr(place, 'timezone') else 5.5
     retval = Dict()
+    cum_years = 0
     for i in range(9):
-        retval[lord] = start_date
-        start_date += vimsottari_dict[lord] * year_duration
+        retval[lord] = _find_sun_return(md_start, cum_years, tz) if cum_years > 0 else md_start
+        cum_years += vimsottari_dict[lord]
         lord = vimsottari_next_adhipati(lord)
 
     return retval
@@ -117,10 +145,11 @@ def _vimsottari_bhukti(maha_lord, start_date, antardhasa_option=1):
         lord = vimsottari_next_adhipati(lord, direction=-1)
     dirn = 1 if antardhasa_option in [1, 3, 5] else -1
     retval = Dict()
+    cum_years = 0
     for i in range(9):
-        retval[lord] = start_date
+        retval[lord] = _find_sun_return(start_date, cum_years) if cum_years > 0 else start_date
         factor = vimsottari_dict[lord] * vimsottari_dict[maha_lord] / human_life_span_for_vimsottari_dhasa
-        start_date += factor * year_duration
+        cum_years += factor
         lord = vimsottari_next_adhipati(lord, dirn)
 
     return retval
@@ -129,16 +158,16 @@ def _vimsottari_bhukti(maha_lord, start_date, antardhasa_option=1):
 # North Indian tradition: dasa-antardasa-pratyantardasa
 # South Indian tradition: dasa-bhukti-antara-sukshma
 def _vimsottari_antara(maha_lord, bhukti_lord, start_date):
-    """Compute all antaradasas from given bhukti's start date.
-    The bhukti's lord and its lord (mahadasa lord) must be given"""
+    """Compute all antaradasas from given bhukti's start date."""
     global human_life_span_for_vimsottari_dhasa, vimsottari_dict
     lord = bhukti_lord
     retval = Dict()
+    cum_years = 0
     for i in range(9):
-        retval[lord] = start_date
+        retval[lord] = _find_sun_return(start_date, cum_years) if cum_years > 0 else start_date
         factor = vimsottari_dict[lord] * (vimsottari_dict[maha_lord] / human_life_span_for_vimsottari_dhasa)
         factor *= (vimsottari_dict[bhukti_lord] / human_life_span_for_vimsottari_dhasa)
-        start_date += factor * year_duration
+        cum_years += factor
         lord = vimsottari_next_adhipati(lord)
 
     return retval
@@ -210,6 +239,8 @@ def get_vimsottari_dhasa_bhukthi(
         # Patch module-level globals so legacy helpers see the correct values
         human_life_span_for_vimsottari_dhasa = H
         vimsottari_dict = _working_dict
+        _tz = place.timezone if hasattr(place, 'timezone') else 5.5
+        vimsottari_dict = _working_dict
 
         # --- Ordered MD starts (OrderedDict) -----------------------------
         dashas = vimsottari_mahadasa(
@@ -243,13 +274,14 @@ def get_vimsottari_dhasa_bhukthi(
         def _children_planetary(parent_lord, parent_start_jd, parent_years):
             """Yield (child_lord, child_start_jd, child_years) for 9 children under parent_lord."""
             start_lord, dirn = _start_and_dir(parent_lord)
-            jd_cursor = parent_start_jd
             lord = start_lord
+            cum_years = 0
             for _ in range(len(const.vimsottari_adhipati_list)):
                 Y = float(vimsottari_dict[lord])  # already tribhagi-scaled if enabled
                 dur_yrs = parent_years * (Y / H)
-                yield (lord, jd_cursor, dur_yrs)
-                jd_cursor += dur_yrs * year_duration
+                child_jd = _find_sun_return(parent_start_jd, cum_years, _tz) if cum_years > 0 else parent_start_jd
+                yield (lord, child_jd, dur_yrs)
+                cum_years += dur_yrs
                 lord = vimsottari_next_adhipati(lord, direction=dirn)
 
         # Emit helper (unified 3-field format)

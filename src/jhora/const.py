@@ -51,7 +51,7 @@ _second_symbol = '"'
 _retrogade_symbol = '℞'
 _ascendant_symbol = 'L'
 " Planet names mapped to swiss ephemerides "
-_use_true_nodes_for_rahu_ketu = True
+_use_true_nodes_for_rahu_ketu = False
 _KETU = -10 #99 if _use_true_nodes_for_rahu_ketu else -swe.MEAN_NODE
 KETU_ID = 8
 _RAHU = swe.TRUE_NODE if _use_true_nodes_for_rahu_ketu else swe.MEAN_NODE
